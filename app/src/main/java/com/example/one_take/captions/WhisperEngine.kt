@@ -2,6 +2,13 @@ package com.example.one_take.captions
 
 import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
+import com.example.one_take.inference.AppInferenceModel
+import com.example.one_take.inference.AppInferenceRuntime
+import com.example.one_take.inference.AppInferenceSessions
+import com.example.one_take.inference.InferenceDiagnostics
+import com.onetake.engine.inference.BackendKind
+import com.onetake.engine.inference.BackendPolicy
+import com.onetake.engine.inference.InferenceSession
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.InternalCoroutinesApi
 import kotlinx.coroutines.Job
@@ -18,7 +25,10 @@ import kotlinx.coroutines.withContext
  * The model is deliberately supplied by the caller. This keeps the APK small
  * and lets the model marketplace install or update a package independently.
  */
-internal class WhisperEngine {
+internal class WhisperEngine(
+    private val policy: BackendPolicy = BackendPolicy.NPU_PREFERRED,
+    private val diagnostics: InferenceDiagnostics = AppInferenceRuntime.diagnostics,
+) {
     companion object {
         // whisper.cpp contexts own substantial memory and are not safe to use
         // concurrently. Hold this lock for the whole session lifetime, even
@@ -51,20 +61,50 @@ internal class WhisperEngine {
         transcriptionLock.withLock {
             withContext(Dispatchers.Default) {
                 requireModel(model)
-                ensureNativeLoaded()
                 currentCoroutineContext().ensureActive()
 
-                val nativeHandle = createSessionNative(model.absolutePath)
-                require(nativeHandle != 0L) { "Whisper could not create a session" }
-                val session = PcmSession(nativeHandle, optimizeForStreaming)
+                // The engine owns model/session preparation.  A strict NPU
+                // policy rejects before the CPU preparation callback runs.
+                val inferenceSession = AppInferenceSessions.open<WhisperInferenceRequest, Array<CaptionSegment>>(
+                        model = AppInferenceModel.WHISPER_TINY,
+                        policy = policy,
+                        diagnostics = diagnostics,
+                    ) { modelSpec ->
+                        ensureNativeLoaded()
+                        val nativeHandle = createSessionNative(model.absolutePath)
+                        require(nativeHandle != 0L) { "Whisper could not create a session" }
+                        object : InferenceSession<WhisperInferenceRequest, Array<CaptionSegment>> {
+                            override val model = modelSpec
+                            override val backend = BackendKind.CPU
+
+                            override fun execute(input: WhisperInferenceRequest): Array<CaptionSegment> =
+                                transcribeSessionNative(
+                                    nativeHandle,
+                                    input.samples,
+                                    input.cancellationToken,
+                                    input.optimizeForStreaming,
+                                )
+
+                            override fun close() = destroySessionNative(nativeHandle)
+                        }
+                }
                 try {
-                    currentCoroutineContext().ensureActive()
-                    block(session)
-                } finally {
-                    // Cancellation must not prevent the native handle from
-                    // being destroyed, including if a child inference is
-                    // still unwinding from its native call.
-                    withContext(NonCancellable) { session.close() }
+                    val session = PcmSession(optimizeForStreaming, inferenceSession)
+                    try {
+                        currentCoroutineContext().ensureActive()
+                        block(session)
+                    } finally {
+                        // Cancellation must not prevent the native handle from
+                        // being destroyed, including if a child inference is
+                        // still unwinding from its native call.
+                        withContext(NonCancellable) { session.close() }
+                    }
+                } catch (failure: Throwable) {
+                    // PcmSession closes the engine session after native
+                    // ownership has been established.  Before that point
+                    // this path still owns the engine session directly.
+                    withContext(NonCancellable) { inferenceSession.close() }
+                    throw failure
                 }
             }
         }
@@ -73,9 +113,11 @@ internal class WhisperEngine {
      * A serialized inference view over one persistent native Whisper context.
      * Samples must be mono, 16 kHz PCM in [-1, 1], and no longer than 120 s.
      */
-    inner class PcmSession internal constructor(handle: Long, private val optimizeForStreaming: Boolean) {
+    inner class PcmSession internal constructor(
+        private val optimizeForStreaming: Boolean,
+        private val inferenceSession: InferenceSession<WhisperInferenceRequest, Array<CaptionSegment>>,
+    ) {
         private val inferenceLock = Mutex()
-        private var nativeHandle = handle
         private var closed = false
 
         @OptIn(InternalCoroutinesApi::class)
@@ -86,7 +128,6 @@ internal class WhisperEngine {
                 require(samples.size <= MAX_SAMPLES) { "audio is longer than 120 seconds" }
                 currentCoroutineContext().ensureActive()
 
-                val handle = nativeHandle
                 val cancellationToken = resetCancelNative()
                 val job = currentCoroutineContext()[Job]
                     ?: error("Transcription has no coroutine job")
@@ -97,7 +138,13 @@ internal class WhisperEngine {
                 }
                 try {
                     currentCoroutineContext().ensureActive()
-                    val result = transcribeSessionNative(handle, samples, cancellationToken, optimizeForStreaming).toList()
+                    val result = inferenceSession.execute(
+                        WhisperInferenceRequest(
+                            samples = samples,
+                            cancellationToken = cancellationToken,
+                            optimizeForStreaming = optimizeForStreaming,
+                        ),
+                    ).toList()
                     currentCoroutineContext().ensureActive()
                     result
                 } finally {
@@ -113,12 +160,17 @@ internal class WhisperEngine {
                     return@withLock
                 }
                 closed = true
-                val handle = nativeHandle
-                nativeHandle = 0L
-                destroySessionNative(handle)
+                inferenceSession.close()
             }
         }
     }
+
+    /** Typed input for one synchronous call through the engine-owned session. */
+    internal data class WhisperInferenceRequest(
+        val samples: FloatArray,
+        val cancellationToken: Long,
+        val optimizeForStreaming: Boolean,
+    )
 
     private fun requireModel(model: File) {
         require(model.isFile && model.canRead()) { "Caption model is missing or unreadable" }
