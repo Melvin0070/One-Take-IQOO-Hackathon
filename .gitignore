@@ -13,3 +13,9 @@
 .externalNativeBuild
 .cxx
 local.properties
+/engine/build/
+.kotlin/
+__pycache__/
+tools/device-monitor/.cache/
+tools/device-monitor/runs/
+.env
