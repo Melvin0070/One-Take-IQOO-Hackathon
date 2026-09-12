@@ -63,8 +63,9 @@ A successful probe is deliberately insufficient to close issue 1.
 | Pause detection | Silero v6.2 GGML | Convert the recurrent graph, preserve state/context and 512-sample framing, verify speech decisions |
 | Face tracking | MediaPipe face landmarker task | Validate delegated component graphs and reproduce task preprocessing, tracking, and landmark geometry |
 
-Qualcomm’s [QIDK Whisper reference](https://github.com/qualcomm/qidk/tree/master/Solutions/NLPSolution3-AutomaticSpeechRecognition-Whisper) includes an SM8850 encoder path but uses a separate TFLite decoder.
-It is a reference for mixed execution, not evidence that the entire caption model runs on HTP.
+Qualcomm’s older [QIDK Whisper reference](https://github.com/qualcomm/qidk/tree/master/Solutions/NLPSolution3-AutomaticSpeechRecognition-Whisper) includes an SM8850 encoder path but uses a separate TFLite decoder.
+The separate [Voice AI ASR integration](https://github.com/qualcomm/qidk/blob/master/GenAI-Solutions/ASR-LLM-TTS/readme_assets/asr_Readme.md) documents both encoder and decoder HTP artifacts and SM8850/V81 support.
+That newer path is the selected caption integration candidate; neither reference establishes execution or caption timing parity in this app.
 The [official Silero source](https://github.com/snakers4/silero-vad/tree/v6.2) provides ONNX assets that are conversion candidates; their compatibility with this HTP runtime has not been established.
 The [MediaPipe Android API](https://ai.google.dev/edge/mediapipe/solutions/vision/face_landmarker/android) does not expose a QNN delegate for the complete task pipeline.
 The local QAIRT conversion tools target supported Linux/Windows hosts; conversion on this macOS host is not established.
@@ -115,3 +116,15 @@ No exporter behavior was changed in this PR.
 The first pause-fixture run exposed incorrect retirement of valid uncertain Silero frames.
 After distinguishing uncertainty from JNI failure, the same recorded-room regression test passed.
 The final checks do not establish NPU model quality, NPU utilization, improved performance, or complete recorder UI coverage.
+
+## Model replacement delivery
+
+[Issue #3](https://github.com/Melvin0070/One-Take-IQOO-Hackathon/issues/3) tracks Qualcomm multilingual Whisper Tiny through Voice AI ASR / QAIRT.
+[Issue #4](https://github.com/Melvin0070/One-Take-IQOO-Hackathon/issues/4) tracks evaluating Qualcomm neural VAD, with Silero ONNX conversion as the alternative.
+[Issue #5](https://github.com/Melvin0070/One-Take-IQOO-Hackathon/issues/5) tracks Qualcomm face detector and landmark components.
+Each pipeline requires its own adapter and physical-device acceptance evidence.
+The bundled Qualcomm VAD library does not establish its execution backend or suitability for editor pause suggestions.
+
+The first caption prerequisite is the local bundle verifier in [tools/model-bundles](../tools/model-bundles/README.md).
+It checks declared target metadata and file integrity without loading native code or marking the model NPU-compatible.
+Runtime and tensor compatibility, distribution rights, graph placement, and output quality remain separate checks.
