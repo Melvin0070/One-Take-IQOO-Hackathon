@@ -70,10 +70,15 @@ data class EngineState(
     val lastVision: VisionObservation? = null,
     val failureReason: String? = null,
     val pauseCandidates: List<PauseCandidate> = emptyList(),
+    val scriptProgress: ScriptProgress? = null,
+    val takeAttempts: List<TakeAttempt> = emptyList(),
 )
 
 /** A state transition submitted to the engine. */
 sealed interface Change {
+    data class ScriptProgressObserved(val progress: ScriptProgress) : Change
+    data class TakeAttemptObserved(val attempt: TakeAttempt) : Change
+
     data class SourceFinalized(
         val sourceId: String,
         val durationSamples: Long,
@@ -207,6 +212,9 @@ class EditingEngine(
 
     private fun validateClock(change: Change, clock: ClockDomain) {
         val required = when (change) {
+            is Change.ScriptProgressObserved -> if (change.progress.reason == ScriptProgressReason.TRANSCRIPT)
+                ClockDomain.RECOGNIZER else ClockDomain.CAPTURE_ESTIMATE
+            is Change.TakeAttemptObserved -> ClockDomain.RECOGNIZER
             is Change.CaptureRequested,
             Change.CaptureStarted,
             is Change.StopRequested,
@@ -235,6 +243,14 @@ class EditingEngine(
 
     private fun reduce(current: EngineState, sample: Long, change: Change): EngineState {
         return when (change) {
+            is Change.ScriptProgressObserved -> {
+                require(current.captureRequested && current.phase in setOf(SessionPhase.RECORDING, SessionPhase.FINALIZING))
+                current.copy(scriptProgress = change.progress.frozen())
+            }
+            is Change.TakeAttemptObserved -> {
+                requireActiveCapture(current, "Take attempt")
+                current.copy(takeAttempts = immutableCopy(current.takeAttempts + change.attempt))
+            }
             is Change.SourceFinalized -> {
                 require(
                     current.phase == SessionPhase.RECORDING ||
@@ -269,6 +285,8 @@ class EditingEngine(
                     lastVision = current.lastVision,
                     failureReason = current.failureReason,
                     pauseCandidates = current.pauseCandidates,
+                    scriptProgress = current.scriptProgress,
+                    takeAttempts = current.takeAttempts,
                 )
             }
 
@@ -452,9 +470,13 @@ class EditingEngine(
         captions = value.captions?.map(::copyCaption)?.let(::immutableCopy),
         edits = value.edits?.let { EditPlan(it.durationSamples, it.cuts) },
         pauseCandidates = immutableCopy(value.pauseCandidates),
+        scriptProgress = value.scriptProgress?.frozen(),
+        takeAttempts = immutableCopy(value.takeAttempts),
     )
 
     private fun copyChange(change: Change): Change = when (change) {
+        is Change.ScriptProgressObserved -> Change.ScriptProgressObserved(change.progress.frozen())
+        is Change.TakeAttemptObserved -> change.copy()
         is Change.SourceFinalized -> change.copy()
         is Change.CaptionsReplaced -> Change.CaptionsReplaced(
             immutableCopy(change.captions.map(::copyCaption)),

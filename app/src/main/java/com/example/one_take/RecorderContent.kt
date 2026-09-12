@@ -45,6 +45,20 @@ internal fun VideoRecorderApp() {
     val setup = remember { RecordingSetupStore(context) }
     // Keep potentially long scripts out of the saved-instance-state Binder bundle.
     var script by remember { mutableStateOf(setup.script) }
+    val scriptSession = remember(recorder, liveEngine) {
+        com.onetake.engine.RecordingSession { sample, change, clock ->
+            recorder.activeEngineSessionId?.let { liveEngine.scriptEvent(it, sample, change, clock) }
+        }
+    }
+    fun newScriptController() = script.takeIf { mode == RecordingMode.Script && it.isNotBlank() }
+        ?.let { ScriptCaptureController(it, scriptSession) }
+    var scriptController by remember(mode, script) { mutableStateOf(newScriptController()) }
+    LaunchedEffect(recorder.activeEngineSessionId) {
+        recorder.activeEngineSessionId?.let { id -> scriptController?.let {
+            liveEngine.scriptEvent(id, 0, com.onetake.engine.Change.ScriptProgressObserved(it.progress.copy(reason = com.onetake.engine.ScriptProgressReason.INITIAL)),
+                com.onetake.engine.ClockDomain.CAPTURE_ESTIMATE)
+        } }
+    }
     var libraryReturn by rememberSaveable { mutableStateOf(AppScreen.Home) }
     var lensFacing by rememberSaveable { mutableIntStateOf(CameraSelector.LENS_FACING_BACK) }
     val captureState = recorder.captureState
@@ -169,7 +183,9 @@ internal fun VideoRecorderApp() {
                     },
                     onStart = {
                         if (!captionJobs.busy) {
-                            captionJobs.startLive { recorder.activeEngineSessionId }
+                            scriptController = newScriptController()
+                            val captureScript = scriptController
+                            captionJobs.startLive(onScriptSegments = captureScript?.let { controller -> { segments -> controller.consume(segments) } }) { recorder.activeEngineSessionId }
                             recorder.setFinalizationBarrier(captionJobs.captureFinalizationBarrier())
                             if (!recorder.startRecording()) captionJobs.abortLive()
                         }
@@ -183,7 +199,9 @@ internal fun VideoRecorderApp() {
                     captureBlocked = captionJobs.busy,
                     liveSegments = captionJobs.liveSegments,
                     mode = mode,
-                    script = if (mode == RecordingMode.Script) script else "",
+                    scriptProgress = scriptController?.progress,
+                    onScriptNext = { scriptController?.next(elapsedMillis) },
+                    onScriptPrevious = { scriptController?.previous(elapsedMillis) },
                     transcriptInstalled = features.installed,
                     transcriptEnabled = features.enabled,
                     pauseCandidateCount = liveEngine.pauseCount(recorder.activeEngineSessionId),

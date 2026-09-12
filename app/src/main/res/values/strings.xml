@@ -58,4 +58,15 @@
     <string name="camera_level_state_level">Level</string>
     <string name="camera_level_state_tilted">Tilted</string>
     <string name="caption_live_listening">Preparing captions while you record…</string>
+    <!-- Teleprompter (#58) -->
+    <string name="script_previous">Previous</string>
+    <string name="script_progress">Chunk %1$d of %2$d</string>
+    <string name="script_complete">Script complete</string>
+    <string name="script_skip">Skip current chunk</string>
+    <string name="script_pending">Pending</string>
+    <string name="script_covered">Covered</string>
+    <string name="script_skipped">Skipped</string>
+    <string name="script_mismatched">Partial match</string>
+    <string name="script_repeated">Repeated</string>
+    <string name="script_manual_only">Manual navigation available. Enable downloaded Offline Captions for auto-advance.</string>
 </resources>
