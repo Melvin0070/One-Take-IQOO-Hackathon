@@ -29,6 +29,7 @@ sealed interface LedgerEvent {
     data class TakeOpened(
         override val id: Long, override val sessionId: String, override val sample: Long,
         val takeId: TakeId, val lineId: LineId, val lineVersion: Int,
+        val coveredLineIds: List<LineId> = listOf(lineId),
     ) : LedgerEvent
 
     data class TakeClosed(
@@ -56,6 +57,12 @@ sealed interface LedgerEvent {
     data class TakeScratched(
         override val id: Long, override val sessionId: String, override val sample: Long,
         val takeId: TakeId, val source: ScratchSource,
+    ) : LedgerEvent
+
+    /** A reversible user action. The target event remains in the log for auditability. */
+    data class UndoApplied(
+        override val id: Long, override val sessionId: String, override val sample: Long,
+        val undoneEventId: Long,
     ) : LedgerEvent
 
     data class TakeCircled(

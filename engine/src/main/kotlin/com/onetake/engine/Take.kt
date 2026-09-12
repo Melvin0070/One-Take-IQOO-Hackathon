@@ -22,6 +22,12 @@ data class Take(
     /** Its line was deleted (R24). Kept, shown as orphaned, not in the cut. */
     val orphaned: Boolean = false,
     val lineVersion: Int = 1,
+    /**
+     * Lines covered by one utterance. An ordinary take contains only [lineId].
+     * Keeping this association on the take lets R3 produce one physical segment
+     * when the reader crosses an adjacent line boundary in one breath.
+     */
+    val coveredLineIds: List<LineId> = listOf(lineId),
 ) {
     /** The only definition of "this take can cover its line". Do not re-derive it. */
     val usable: Boolean
