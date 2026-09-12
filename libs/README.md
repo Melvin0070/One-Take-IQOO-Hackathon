@@ -4,11 +4,14 @@ Artifacts that are not available as a trustworthy Maven coordinate. Everything h
 checked into git deliberately, with its reason. `flatDir { dirs("libs") }` in
 `settings.gradle.kts` makes them resolvable.
 
-## sherpa-onnx — REQUIRED, not yet present
+## sherpa-onnx: pinned runtime
 
-Download `sherpa-onnx-static-link-onnxruntime-1.13.8.aar` (or newer) from the sherpa-onnx
-GitHub **release assets** and drop it here, then uncomment the dependency in
-`asr/build.gradle.kts`.
+`sherpa-onnx-static-link-onnxruntime-1.13.8.aar` is vendored from the official release.
+Its SHA-256 is `b22c3fc1b6a45666d28892bb2f7694beeb77a8362d7ebd77c1a5431ec9435471`, matching the release asset digest.
+The production app and speech test APK select arm64-v8a, whose AAR payload contains only `libsherpa-onnx-jni.so`.
+The upstream x86 payload includes a separate ONNX Runtime and is deliberately excluded.
+A recorded-audio test on I2501 passed actual nonempty recognition and Silero VAD with this runtime.
+This runtime test does not establish live application integration or accuracy.
 
 **Two things will go wrong if you take a shortcut:**
 

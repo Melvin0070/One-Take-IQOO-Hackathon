@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "model_set": "sherpa-live-en-v1",
+  "runtime_version": "1.13.8",
+  "processor": "CPU",
+  "sample_rate": 16000,
+  "artifacts": [
+    {
+      "path": "silero_vad.onnx",
+      "size_bytes": 643854,
+      "sha256": "9e2449e1087496d8d4caba907f23e0bd3f78d91fa552479bb9c23ac09cbb1fd6"
+    },
+    {
+      "path": "encoder-epoch-99-avg-1.int8.onnx",
+      "size_bytes": 42845182,
+      "sha256": "3810755ce7c3ab26b42a8bcf39d191308fa27fb0f53358823ba46141d03b7eb3"
+    },
+    {
+      "path": "decoder-epoch-99-avg-1.onnx",
+      "size_bytes": 2092272,
+      "sha256": "45a7f940ecfb53d89fa270ad11b88b961e53a317203eb24b1c8e95ed208b0f30"
+    },
+    {
+      "path": "joiner-epoch-99-avg-1.onnx",
+      "size_bytes": 1026462,
+      "sha256": "343e17dffa4f386ca206e00d3c406908f68f473c3d35968d6c3cddd5b8559a94"
+    },
+    {
+      "path": "tokens.txt",
+      "size_bytes": 5048,
+      "sha256": "49e3c2646595fd907228b3c6787069658f67b17377c60aeb8619c4551b2316fb"
+    }
+  ]
+}

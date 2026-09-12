@@ -28,6 +28,7 @@ tools/device-monitor/runs/
 /build/
 # Vendored binaries are committed by exception; models never are.
 libs/*.aar
+!libs/sherpa-onnx-static-link-onnxruntime-1.13.8.aar
 !libs/README.md
 *.tflite
 *.onnx

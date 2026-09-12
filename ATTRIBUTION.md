@@ -12,7 +12,7 @@ at submission and this is the only place it is written down.
 
 | Component | Version / file | License | Source |
 |---|---|---|---|
-| _(add as they land)_ | | | |
+| sherpa-onnx Android runtime (arm64 static-link) | 1.13.8 | Apache-2.0 | https://github.com/k2-fsa/sherpa-onnx/releases/tag/v1.13.8 |
 
 <!--
 Expected entries once the lanes land, with the licenses already researched:
