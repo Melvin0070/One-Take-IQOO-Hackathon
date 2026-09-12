@@ -50,6 +50,17 @@ class TimelineCodecTest {
         }
     }
 
+    @Test fun roundTripsEveryUtf16CodeUnitInReasons() {
+        val reason = (0..65535).map(Int::toChar).joinToString("")
+        val timeline = Timeline(listOf(Clip("all-code-units", 0, 1, reason = reason)))
+        assertEquals(timeline, TimelineCodec.decode(TimelineCodec.encode(timeline)))
+    }
+
+    @Test fun decodesStandardJsonEscapes() {
+        val payload = """{"version":1,"clips":[{"id":"a","sourceStart":0,"sourceEnd":1,"state":"KEEP","reason":"\b\f\n\r\t\/\\\u0041"}]}"""
+        assertEquals("\b\u000c\n\r\t/\\A", TimelineCodec.decode(payload).clips.single().reason)
+    }
+
     @Test fun rejectsExcessiveNesting() {
         assertThrows(IllegalArgumentException::class.java) {
             TimelineCodec.decode("[".repeat(100) + "]".repeat(100))
