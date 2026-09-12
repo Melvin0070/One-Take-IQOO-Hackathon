@@ -45,6 +45,8 @@ internal fun VideoRecorderApp() {
     val analysis = remember { RecordingAnalysisHandoff.get(context) }
     var featureReturn by rememberSaveable { mutableStateOf(AppScreen.Camera) }
     val store = recorder.videoStore
+    val projectCatalog = remember { ProjectCatalog(context.applicationContext) }
+    val projectStore = remember { com.example.one_take.projects.ProjectStore(context.applicationContext) }
     val scope = rememberCoroutineScope()
     var screen by rememberSaveable { mutableStateOf(AppScreen.Home) }
     var mode by rememberSaveable { mutableStateOf(RecordingMode.Assisted) }
@@ -64,14 +66,15 @@ internal fun VideoRecorderApp() {
     var retryToken by remember { mutableIntStateOf(0) }
     var elapsedMillis by remember { mutableLongStateOf(0L) }
     var reviewPath by rememberSaveable { mutableStateOf<String?>(null) }
+    var reviewProjectId by rememberSaveable { mutableStateOf<String?>(null) }
     var reviewingSaved by rememberSaveable { mutableStateOf(false) }
     var deletePath by rememberSaveable { mutableStateOf<String?>(null) }
     var deleting by remember { mutableStateOf(false) }
-    var videos by remember { mutableStateOf(emptyList<File>()) }
+    var projects by remember { mutableStateOf(emptyList<ProjectSummary>()) }
     var libraryLoading by remember { mutableStateOf(false) }
+    var libraryFailed by remember { mutableStateOf(false) }
     var refresh by remember { mutableIntStateOf(0) }
     val snackbar = remember { SnackbarHostState() }
-    val libraryError = stringResource(R.string.library_error)
     val deleteError = stringResource(R.string.delete_error)
     val captionBusyMessage = stringResource(R.string.caption_file_busy)
 
@@ -79,7 +82,15 @@ internal fun VideoRecorderApp() {
     LaunchedEffect(liveEngine.error) { liveEngine.error?.let { snackbar.showSnackbar(it) } }
     fun openLibrary() {
         if (screen == AppScreen.Home || screen == AppScreen.Camera) libraryReturn = screen
-        cameraReady = false; reviewPath = null; screen = AppScreen.Library; refresh++
+        cameraReady = false; reviewPath = null; reviewProjectId = null; screen = AppScreen.Library; refresh++
+    }
+
+    LaunchedEffect(projectStore) {
+        try {
+            val recovered = recorder.recoverVideos()
+            withContext(Dispatchers.IO) { projectStore.migrate(recovered) }
+        } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+        catch (_: Exception) { /* Projects exposes loading errors and retries migration per card. */ }
     }
 
     DisposableEffect(recorder) {
@@ -89,6 +100,7 @@ internal fun VideoRecorderApp() {
             override fun onRecordingFinalized(file: File) {
                 if (REVIEW_SCREEN_AFTER_RECORDING) {
                     reviewPath = file.absolutePath
+                    reviewProjectId = null
                     reviewingSaved = false
                     screen = AppScreen.Review
                 }
@@ -137,12 +149,16 @@ internal fun VideoRecorderApp() {
         } else null
         onDispose { observer?.stopWatching() }
     }
-    LaunchedEffect(screen, refresh) {
+    LaunchedEffect(screen, refresh, captionJobs.revision) {
         if (screen == AppScreen.Library) {
             libraryLoading = true
-            try { videos = recorder.recoverVideos() }
+            try {
+                val recovered = recorder.recoverVideos()
+                projects = withContext(Dispatchers.IO) { projectCatalog.load(recovered) }
+                libraryFailed = false
+            }
             catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
-            catch (_: Exception) { message(libraryError) }
+            catch (_: Exception) { libraryFailed = true }
             finally { libraryLoading = false }
         }
     }
@@ -211,19 +227,23 @@ internal fun VideoRecorderApp() {
                 )
             }
             AppScreen.Features -> FeatureMarketplaceScreen(features, onBack = { screen = featureReturn })
-            AppScreen.Library -> LibraryScreen(videos, libraryLoading,
+            AppScreen.Library -> ProjectsScreen(projects, libraryLoading,
                 onRecord = { cameraReady = false; mode = RecordingMode.Assisted; screen = AppScreen.Camera },
-                onOpen = { file -> reviewPath = file.absolutePath; reviewingSaved = true; screen = AppScreen.Review },
+                onOpen = { project ->
+                    reviewPath = project.source.absolutePath
+                    reviewProjectId = project.id.takeUnless { it == project.source.absolutePath }
+                    reviewingSaved = true; screen = AppScreen.Review
+                },
                 onDelete = {
-                    if (captionJobs.busy && captionJobs.sourcePath == it.absolutePath) message(captionBusyMessage)
-                    else deletePath = it.absolutePath
-                })
+                    if (captionJobs.busy && captionJobs.sourcePath == it.source.absolutePath) message(captionBusyMessage)
+                    else deletePath = it.source.absolutePath
+                }, loadFailed = libraryFailed, onRetry = { refresh++ })
             AppScreen.Review -> {
                 val path = reviewPath
-                if (path != null) ReviewScreen(File(path), reviewingSaved,
+                if (path != null) ProjectReviewRoute(reviewProjectId, File(path), projectStore, reviewingSaved, mode, script,
                     onRetake = { deletePath = path }, onKeep = ::openLibrary,
                     onOpenFeatures = { featureReturn = AppScreen.Review; screen = AppScreen.Features },
-                    onOpenExport = { file -> reviewPath = file.absolutePath; reviewingSaved = true })
+                    onOpenExport = { file -> reviewPath = file.absolutePath; reviewProjectId = null; reviewingSaved = true })
                 else LaunchedEffect(Unit) { openLibrary() }
             }
         }
@@ -241,7 +261,7 @@ internal fun VideoRecorderApp() {
                     deleting = true
                     scope.launch {
                         val success = withContext(Dispatchers.IO) {
-                            try { store.deleteVideo(file) } catch (_: java.io.IOException) { false }
+                            try { projectStore.deleteSource(file) } catch (_: Exception) { false }
                         }
                         deleting = false
                         deletePath = null

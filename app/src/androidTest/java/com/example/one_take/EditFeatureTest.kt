@@ -64,9 +64,9 @@ class EditFeatureTest {
             assertEquals(decision, edits.read(source))
             assertNotNull(com.example.one_take.engine.EngineProjectStore(context).read(source))
             compose.waitUntil(15_000) {
-                runCatching { compose.onNodeWithContentDescription("Saved videos").assertExists() }.isSuccess
+                runCatching { compose.onNodeWithContentDescription("Projects").assertExists() }.isSuccess
             }
-            compose.onNodeWithContentDescription("Saved videos").performClick()
+            compose.onNodeWithContentDescription("Projects").performClick()
             compose.waitUntil(15_000) {
                 runCatching { compose.onNodeWithContentDescription("Play " + source.name).assertExists() }.isSuccess
             }
@@ -99,6 +99,10 @@ class EditFeatureTest {
             exported = jobs.exportedFile
             assertNotNull(exported)
             assertEquals(originalHash, hash(source))
+            val project = com.example.one_take.projects.ProjectStore(context).load(
+                com.example.one_take.projects.ProjectStore.idFor(source))
+            assertNotNull("Edit/export flow must retain its project manifest", project)
+            assertEquals(source.canonicalPath, project!!.originalVideoPath)
             val metadata = MediaMetadataRetriever()
             try {
                 metadata.setDataSource(exported!!.absolutePath)
@@ -132,10 +136,10 @@ class EditFeatureTest {
             edits.remove(raw.outputFile)
             com.example.one_take.engine.EngineProjectStore(context).remove(raw.outputFile)
             raw.discard()
-            store.deleteVideo(raw.outputFile)
+            com.example.one_take.projects.ProjectStore(context).deleteSource(raw.outputFile)
             exported?.let {
                 com.example.one_take.engine.EngineProjectStore(context).remove(it)
-                store.deleteVideo(it)
+                com.example.one_take.projects.ProjectStore(context).deleteSource(it)
             }
         }
     }

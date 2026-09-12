@@ -44,7 +44,7 @@ class CameraLayoutTest {
         compose.activityRule.scenario.recreate()
         if (originalGrid) compose.onNodeWithTag("composition-grid").assertDoesNotExist()
         else compose.onNodeWithTag("composition-grid").assertExists()
-        compose.onNodeWithContentDescription("Saved videos").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Projects").assertIsDisplayed()
         compose.onNodeWithContentDescription("Recording preset").assertDoesNotExist()
         compose.onNodeWithText("VIDEO").assertDoesNotExist()
     }

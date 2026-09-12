@@ -1,5 +1,104 @@
 # Current verification
 
+## ProjectStore #53 and manifest-backed #63, 2026-09-12
+
+Base: `9e21147` after PR #75 merged; branch `feat/53-project-store`.
+See [the storage contract](project-store.md) and [Projects integration](projects-screen.md).
+
+Focused unit validation passes 33 tests: 14 ProjectStore, 5 ProjectCatalog, and 14 EngineProjectStore.
+Coverage includes versioned round-trip, unknown-field preservation, idempotent migration, capture-header races,
+recovery of missing metadata, exact document order, stale revisions, failures before/after manifest publication,
+asset confinement, invalid durations, and active-recording deletion protection.
+
+```powershell
+$env:JAVA_HOME = 'C:/Program Files/Android/Android Studio/jbr'
+./gradlew.bat :app:testDebugUnitTest --tests com.example.one_take.projects.ProjectStoreTest --tests com.example.one_take.ProjectCatalogTest --tests com.example.one_take.engine.EngineProjectStoreTest :app:compileDebugAndroidTestKotlin --console=plain
+./gradlew.bat :app:assembleDebug :app:assembleDebugAndroidTest :app:lintDebug --console=plain
+```
+
+App/test APK assembly and instrumentation compilation passed. Lint reports zero errors, 29 warnings and two hints.
+A broader host run during this task retained the nine known Windows failures (two VideoStore marker assertions,
+seven VisualAnalyzer native-library failures); it was not a passing full suite. Subsequent store-only recovery and
+invalid-input guards were validated by the focused unit run above.
+
+On the ADB-discovered I2501 `10BFC41SMX001UZ`, direct instrumentation passed all six cases in 12.862 seconds
+without foreground intervention: five ProjectsFlowTest cases and EditFeatureTest's caption-free edit/export case.
+The full edit/export cycle retained the original SHA-256 and its project manifest. Reopening by project ID,
+script header restoration, safe deletion, unavailable details, and byte-for-byte preservation of reordered timeline
+JSON through the explicit recording fallback passed. This does not verify rendering reordered clips in the new editor.
+
+```powershell
+adb -s 10BFC41SMX001UZ install -r app/build/outputs/apk/debug/app-debug.apk
+adb -s 10BFC41SMX001UZ install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+adb -s 10BFC41SMX001UZ shell am instrument --user 0 -w -r -e class 'com.example.one_take.ProjectsFlowTest,com.example.one_take.EditFeatureTest#editsExportWithoutCaptionsWithoutChangingOriginal' com.example.one_take.test/androidx.test.runner.AndroidJUnitRunner
+```
+
+Evidence remains in ignored `app/build/project-store-*.log`. No app uninstall/data clear was used.
+CameraRecorder and VideoStore implementations were unchanged. Simulated I/O errors verify atomic-publication
+behavior; physical power loss and multi-process stress were not tested. Clip-editor integration remains #54/#64.
+
+## Atomic commit ba90938 recheck, 2026-09-12
+
+On the user's subsequent request to test the commit, the focused check passed:
+5/5 ProjectCatalog unit tests and 4/4 ProjectsFlowTest device tests (7.026 seconds).
+The device run completed without foreground assistance on I2501 `10BFC41SMX001UZ`.
+It verifies saved edits across reopening/recreation, original-file hash preservation,
+confirmed deletion, unavailable details, and journal-derived script title/mode.
+
+Commands: `./gradlew.bat :app:testDebugUnitTest --tests com.example.one_take.ProjectCatalogTest :app:assembleDebug :app:assembleDebugAndroidTest --console=plain`,
+then `adb install -r` for both APKs and direct instrumentation with `-e class com.example.one_take.ProjectsFlowTest`.
+Build and focused tests passed; the full suite was not rerun. Logs: `app/build/projects-atomic-check.log`
+and `app/build/projects-atomic-device.log`. No implementation changes were needed.
+
+## Projects screen #63, 2026-09-12 (Windows)
+
+Base: `9b7f909`, branch `feat/63-projects-screen`. See [scope and remaining integration](projects-screen.md).
+The existing README edits and untracked main-validation/assigned-plan documents were preserved.
+Host: Windows with Android Studio JBR; device: ADB-discovered iQOO I2501, serial `10BFC41SMX001UZ`.
+
+```powershell
+$env:JAVA_HOME = 'C:/Program Files/Android/Android Studio/jbr'
+./gradlew.bat :app:testDebugUnitTest :engine:test :engine-android:testDebugUnitTest :app:compileDebugAndroidTestKotlin :app:lintDebug :app:assembleDebug :app:assembleDebugAndroidTest --continue --console=plain
+```
+
+Results: engine 100/100, app 141/143, engine-android 17/24. All five new ProjectCatalog tests pass.
+The full command exits 1 due to nine failures reproduced before feature implementation:
+two VideoStoreTest pending-marker deletion assertions on Windows and seven VisualAnalyzerTest native-library loading errors.
+No implementation in those areas was changed. Both APKs and instrumentation compilation succeed;
+app lint has zero errors, 29 warnings and two hints. Logs are under ignored `app/build/projects-*.log`.
+
+Test-first evidence: all five catalog tests failed against the empty catalog contract before implementation;
+the Projects deletion/navigation test failed against the old Library screen before its replacement.
+The first updated device run passed seven of eight tests. Its script fixture incorrectly emitted a live event
+after finalization; the engine rejected it. The fixture was corrected to request/start capture, emit progress,
+then finalize. No engine validation was relaxed.
+
+The four ProjectsFlowTest cases subsequently passed on the phone: persisted cut choices and undo survive
+reopening/recreation without changing the original SHA-256; delete cancellation preserves the recording and
+confirmation preserves another recording; unavailable media details remain visible/deletable; saved script
+title/mode survive recreation. The four RecordingModeFlowTest cases also passed in the first device run.
+Installed using `adb install -r` and direct instrumentation, without clearing app data or uninstalling.
+The Projects screenshot was inspected at `app/build/projects-63.png`.
+
+The broader 14-test run passed 12 cases in 256.865 seconds and required foreground assistance after
+instrumentation paused in its helper Activity. Its recording-delete and retake cases failed. RecorderFlowTest
+cleanup now disposes composition in the foreground, matching VisualSuggestionsTest; those two cases also
+wait for the existing post-processing ownership guard before exercising deletion. An unassisted six-case
+rerun passed all four Projects cases and retake; the recording-delete case lost its Compose hierarchy when
+Vivo Remote Control became foreground. The final isolated recording-delete rerun passed in 6.242 seconds
+(`projects-delete-final.log`). This is not a claim that the broad suite passed in one unattended invocation.
+Testing paused when the user requested implementation-only work; the later authorized commit recheck is recorded above.
+
+```powershell
+adb -s 10BFC41SMX001UZ install -r app/build/outputs/apk/debug/app-debug.apk
+adb -s 10BFC41SMX001UZ install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+adb -s 10BFC41SMX001UZ shell am instrument --user 0 -w -r -e class 'com.example.one_take.ProjectsFlowTest,com.example.one_take.RecorderFlowTest#keptVideoAppearsInLibraryAndCanBeDeleted,com.example.one_take.RecorderFlowTest#retakeCanBeCancelledOrConfirmed' com.example.one_take.test/androidx.test.runner.AndroidJUnitRunner
+adb -s 10BFC41SMX001UZ shell am instrument --user 0 -w -r -e class 'com.example.one_take.RecorderFlowTest#keptVideoAppearsInLibraryAndCanBeDeleted' com.example.one_take.test/androidx.test.runner.AndroidJUnitRunner
+```
+
+Full reordered-clip acceptance remains untested because #53/#54/#64 are not integrated. Existing cuts are
+source-ordered intervals, not the new reorderable clip timeline. This is not full completion of #63.
+
 ## Assigned recording UI, 2026-09-12 (Windows)
 
 Work began from freshly pulled `origin/main` at `974c489` after the requested tracked/untracked cleanup.

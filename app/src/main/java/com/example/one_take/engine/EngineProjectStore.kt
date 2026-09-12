@@ -124,6 +124,12 @@ internal class EngineProjectStore internal constructor(
             ?.forEach { if (!it.delete()) throw IOException("Unable to remove engine history") }
     }
 
+    /** Exposes the owned journal reference without duplicating its naming/migration rules. */
+    @Synchronized fun journalFile(source: File): File = synchronized(importLock) {
+        open(source)
+        File(directory, "${pathKey(source)}-${recordingFingerprint(source)}.ledger")
+    }
+
     /** Atomically adopts the capture UUID/history, preserving edits made during recovery. */
     @Synchronized fun adoptCapture(source: File, history: List<Event>): Unit = synchronized(importLock) {
         require(history.isNotEmpty()) { "Capture history is empty" }

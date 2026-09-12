@@ -201,7 +201,7 @@ class LiveEngineProcessDeathTest {
         )
         assertEquals(SessionPhase.INTERRUPTED, interrupted.phase)
 
-        // Going through Saved videos invokes VideoStore recovery and then the
+        // Going through Projects invokes VideoStore recovery and then the
         // coordinator's capture-to-project adoption path.
         compose.onNodeWithContentDescription(SAVED_VIDEOS).performClick()
         waitForText(SAVED_VIDEOS)
@@ -248,7 +248,7 @@ class LiveEngineProcessDeathTest {
             compose.waitUntil(timeoutMillis = FILE_WAIT_TIMEOUT) {
                 val state = runCatching { captureStore.snapshot(session) }.getOrNull()
                 state?.phase == SessionPhase.READY && !marker.exists() &&
-                    compose.onAllNodesWithText(source.name).fetchSemanticsNodes().isNotEmpty()
+                    compose.onAllNodesWithContentDescription("Play " + source.name).fetchSemanticsNodes().isNotEmpty()
             }
         } else {
             // Invalid or missing partial media has no READY transition. Allow
@@ -364,7 +364,7 @@ class LiveEngineProcessDeathTest {
         const val PROJECT_SESSION_KEY = "projectSessionId"
         const val START_RECORDING = "Start recording"
         const val STOP_RECORDING = "Stop recording"
-        const val SAVED_VIDEOS = "Saved videos"
+        const val SAVED_VIDEOS = "Projects"
         const val MIN_CAPTURE_MILLIS = 1_500L
         const val UI_WAIT_TIMEOUT = 25_000L
         const val FILE_WAIT_TIMEOUT = 45_000L

@@ -66,9 +66,9 @@ class SpeechSuggestionFeatureTest {
             val suggestion = projects.read(source)!!.edits!!.cuts.single()
             assertFalse(suggestion.enabled)
             compose.waitUntil(15_000) { runCatching {
-                compose.onNodeWithContentDescription("Saved videos").assertExists()
+                compose.onNodeWithContentDescription("Projects").assertExists()
             }.isSuccess }
-            compose.onNodeWithContentDescription("Saved videos").performClick()
+            compose.onNodeWithContentDescription("Projects").performClick()
             compose.waitUntil(15_000) { runCatching {
                 compose.onNodeWithContentDescription("Play " + source.name).assertExists()
             }.isSuccess }
