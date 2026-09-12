@@ -71,6 +71,7 @@ class VisualSuggestionsTest {
                 OneTakeTheme { VideoRecorderApp() }
             }
         }
+        compose.onNodeWithText("Assisted Mode").performClick()
         compose.waitUntil(30_000) {
             compose.onAllNodesWithContentDescription("Start recording").fetchSemanticsNodes()
                 .any { !it.config.contains(SemanticsProperties.Disabled) }
