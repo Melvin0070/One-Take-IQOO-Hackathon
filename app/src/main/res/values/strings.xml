@@ -1,6 +1,12 @@
 <resources>
     <string name="app_name">One-Take</string>
-    <string name="saved_videos">Saved videos</string>
+    <string name="saved_videos">Projects</string>
+    <string name="project_script_mode">Script Mode</string>
+    <string name="project_assisted_mode">Assisted Mode</string>
+    <string name="project_edited">Edited</string>
+    <string name="project_details_unavailable">Details unavailable</string>
+    <string name="project_duration_unavailable">Duration unavailable</string>
+    <string name="retry_projects">Retry</string>
     <string name="record_video">Record a video</string>
     <string name="start_recording">Start recording</string>
     <string name="stop_recording">Stop recording</string>
@@ -17,12 +23,12 @@
     <string name="review_video">Review video</string>
     <string name="video_playback">Video playback</string>
     <string name="playback_error">This recording cannot be played on this device.</string>
-    <string name="review_hint">Tap the video for playback controls. Your recording is saved. Back keeps it in Saved videos.</string>
+    <string name="review_hint">Tap the video for playback controls. Your recording is saved. Back keeps it in Projects.</string>
     <string name="retake">Retake</string>
     <string name="keep_video">Keep video</string>
     <string name="done">Done</string>
     <string name="library_storage_hint">Videos stay on this device in app storage. Uninstalling the app removes them.</string>
-    <string name="no_videos">No saved videos yet.</string>
+    <string name="no_videos">No projects yet. Record a video to get started.</string>
     <string name="play_named_video">Play %1$s</string>
     <string name="delete_named_video">Delete %1$s</string>
     <string name="delete">Delete</string>
@@ -30,7 +36,7 @@
     <string name="delete_title">Delete recording?</string>
     <string name="delete_description">This permanently deletes the video from this device.</string>
     <string name="delete_error">The recording could not be deleted. Please try again.</string>
-    <string name="library_error">Saved videos could not be loaded. Please try again.</string>
+    <string name="library_error">Projects could not be loaded. Please try again.</string>
 
     <string name="error_camera_start_failed">Camera could not be started. Try again.</string>
     <string name="error_camera_still_starting">Camera is still starting. Please try again in a moment.</string>

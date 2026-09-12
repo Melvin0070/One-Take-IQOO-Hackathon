@@ -86,7 +86,7 @@ class RecordingModeFlowTest {
 
     @Test fun projectsReturnHome() {
         compose.onNodeWithText("Projects").performClick()
-        compose.onNodeWithText("Saved videos").assertIsDisplayed()
+        compose.onNodeWithText("Projects").assertIsDisplayed()
         pressBack()
         compose.onNodeWithTag("home-screen").assertIsDisplayed()
     }

@@ -64,9 +64,9 @@ class EditFeatureTest {
             assertEquals(decision, edits.read(source))
             assertNotNull(com.example.one_take.engine.EngineProjectStore(context).read(source))
             compose.waitUntil(15_000) {
-                runCatching { compose.onNodeWithContentDescription("Saved videos").assertExists() }.isSuccess
+                runCatching { compose.onNodeWithContentDescription("Projects").assertExists() }.isSuccess
             }
-            compose.onNodeWithContentDescription("Saved videos").performClick()
+            compose.onNodeWithContentDescription("Projects").performClick()
             compose.waitUntil(15_000) {
                 runCatching { compose.onNodeWithContentDescription("Play " + source.name).assertExists() }.isSuccess
             }

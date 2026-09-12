@@ -32,7 +32,7 @@ class RecorderControlsTest {
                 onOpenSettings = { settingsOpened = true }, onOpenLibrary = { libraryOpened = true })
         }
         compose.onNodeWithText("Open Settings").performClick()
-        compose.onNodeWithText("Saved videos").performClick()
+        compose.onNodeWithText("Projects").performClick()
         compose.runOnIdle {
             assertEquals(true, settingsOpened)
             assertEquals(true, libraryOpened)
