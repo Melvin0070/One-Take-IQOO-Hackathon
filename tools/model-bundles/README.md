@@ -88,3 +88,41 @@ Run the focused tests with:
 ```sh
 python3 -m unittest discover -s tools/model-bundles -p 'test_*.py' -v
 ```
+
+## Install the pinned Whisper release
+
+`install_bundle.py` prepares the public Qualcomm Whisper Tiny v0.61.0 Voice AI archive for an app-owned model directory.
+The command accepts the exact archive URL only through `--download`, or a local copy through `--archive`.
+Both paths require the pinned archive size and SHA-256 digest before any extraction begins.
+
+```sh
+python3 tools/model-bundles/install_bundle.py \
+  --archive /path/to/whisper_tiny-voice_ai-float-qualcomm_snapdragon_8_elite_gen5_for_galaxy.zip \
+  --destination /path/to/qualcomm-whisper
+```
+
+To download the pinned release with the standard HTTPS certificate checks, use:
+
+```sh
+python3 tools/model-bundles/install_bundle.py \
+  --download \
+  --destination /path/to/qualcomm-whisper
+```
+
+The installer extracts only `encoder.bin`, `decoder.bin`, `vocab.bin`, `metadata.json`, and `config.json` from the expected archive root.
+It rejects duplicate or unsafe paths, symbolic links, unknown entries, incomplete files, oversized files, and digest mismatches.
+The destination uses an `active` pointer and version directories so failed or cancelled installs leave the previous verified bundle available.
+Repeated installation of the same verified release reuses the active directory.
+
+The Android API has the same contract through `WhisperBundleInstaller`.
+Call `WhisperBundleInstaller.resolveInstalled(context)` to obtain a directory only after all five pinned files pass verification.
+Call `WhisperBundleInstaller(context).install(archive)` from a worker thread and provide `WhisperInstallCancellation` when the caller can cancel the operation.
+The public graph adapter should open `encoder.bin` and `decoder.bin` from the returned directory and use `vocab.bin` for token conversion.
+
+The pinned manifest is [whisper-tiny-v0610-sm8850-manifest.json](whisper-tiny-v0610-sm8850-manifest.json).
+It records the three runtime artifacts required by the existing verifier.
+The supplementary metadata and config files are also verified by the installer.
+
+The model card labels the original Whisper implementation Apache-2.0 and links its license at [the v4.42.3 Transformers license](https://github.com/huggingface/transformers/blob/v4.42.3/LICENSE).
+The precompiled Qualcomm archive is distributed from the public AI Hub asset URL and its own redistribution terms should be reviewed before shipping the files in an application.
+This repository does not commit model weights or claim a redistribution grant.

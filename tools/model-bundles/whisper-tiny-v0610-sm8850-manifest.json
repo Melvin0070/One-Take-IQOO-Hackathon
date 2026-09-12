@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "model_id": "qualcomm/Whisper-Tiny",
+  "model_version": "v0.61.0",
+  "target": {
+    "device_model": "I2501",
+    "soc_model": "SM8850",
+    "soc_variant": "V81"
+  },
+  "qairt_version": "2.45.0.260326154327",
+  "voice_ai_version": "v0.61.0",
+  "source": "https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-models/models/whisper_tiny/releases/v0.61.0/whisper_tiny-voice_ai-float-qualcomm_snapdragon_8_elite_gen5_for_galaxy.zip",
+  "license": "https://github.com/huggingface/transformers/blob/v4.42.3/LICENSE",
+  "artifacts": [
+    {
+      "role": "encoder",
+      "path": "encoder.bin",
+      "size_bytes": 20025344,
+      "sha256": "c5722aebdce1621e9cddf832b134461a385018a12eabe519a68fad0bcc752f25"
+    },
+    {
+      "role": "decoder",
+      "path": "decoder.bin",
+      "size_bytes": 97615872,
+      "sha256": "45418a0c81c8964f2d1448e03f5ce35cd01daa4de19269962fd0414547cccccd"
+    },
+    {
+      "role": "vocabulary",
+      "path": "vocab.bin",
+      "size_bytes": 357313,
+      "sha256": "0ba87984671b92e03b56b84ce9b217020663f6a269b5a9800901391430b79c4b"
+    }
+  ]
+}
