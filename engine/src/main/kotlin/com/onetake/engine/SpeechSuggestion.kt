@@ -66,23 +66,22 @@ class SpeechSuggestionDetector(
         if (words.isEmpty()) return emptyList()
 
         val candidates = ArrayList<RawSuggestion>()
+        FillerLexicon.scan(words.map { it.word }, minimumConfidence).spans.forEach { span ->
+            addCandidate(
+                candidates,
+                RawSuggestion(
+                    startIndex = span.startIndex,
+                    endIndexExclusive = span.endIndexExclusive,
+                    comparedEndIndexExclusive = span.endIndexExclusive,
+                    kind = SpeechSuggestion.Kind.FILLER,
+                ),
+                words,
+            )
+        }
         words.forEachIndexed { index, timed ->
             if (!timed.eligible(minimumConfidence)) return@forEachIndexed
 
             val token = canonicalToken(timed.word.text)
-            if (token in FILLER_WORDS) {
-                addCandidate(
-                    candidates,
-                    RawSuggestion(
-                        startIndex = index,
-                        endIndexExclusive = index + 1,
-                        comparedEndIndexExclusive = index + 1,
-                        kind = SpeechSuggestion.Kind.FILLER,
-                    ),
-                    words,
-                )
-            }
-
             val next = words.getOrNull(index + 1)
             if (next != null &&
                 next.eligible(minimumConfidence) &&
@@ -329,8 +328,6 @@ class SpeechSuggestionDetector(
         const val MAX_CANDIDATE_SAMPLES: Long = 64_000L
         const val MIN_PREFIX_WORDS: Int = 2
         const val MAX_PREFIX_WORDS: Int = 4
-
-        private val FILLER_WORDS = setOf("um", "uh", "umm", "uhh", "erm")
 
         /** Convenience entry point for callers without detector configuration. */
         fun detect(captions: List<Caption>): List<SpeechSuggestion> =
