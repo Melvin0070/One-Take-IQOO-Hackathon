@@ -128,3 +128,9 @@ The bundled Qualcomm VAD library does not establish its execution backend or sui
 The first caption prerequisite is the local bundle verifier in [tools/model-bundles](../tools/model-bundles/README.md).
 It checks declared target metadata and file integrity without loading native code or marking the model NPU-compatible.
 Runtime and tensor compatibility, distribution rights, graph placement, and output quality remain separate checks.
+
+## Direct QNN graph execution follow-up
+
+The [Whisper graph runtime](qualcomm-whisper-graphs.md) adds engine-owned HTP context execution using public encoder and decoder binaries.
+Its device tests execute both graphs and verify strict NPU reports.
+The recorder’s complete caption path remains on CPU until audio features, decoding, timestamps and quality validation are connected.
