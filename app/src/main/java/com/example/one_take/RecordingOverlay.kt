@@ -2,9 +2,7 @@ package com.example.one_take
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -19,27 +17,30 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.one_take.captions.CaptionSegment
+import com.onetake.engine.ScriptProgress
 
-/** One shared preview slot. The matcher-driven teleprompter can replace the script branch (#58). */
+/** One shared preview slot: the matcher-driven teleprompter in Script Mode, live transcript in Assisted Mode. */
 @Composable
 internal fun RecordingOverlay(
     mode: RecordingMode,
-    script: String,
+    scriptProgress: ScriptProgress?,
     segments: List<CaptionSegment>,
     recording: Boolean,
     installed: Boolean,
     enabled: Boolean,
     onOpenFeatures: () -> Unit,
+    onScriptNext: () -> Unit,
+    onScriptPrevious: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val scrim = modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
         .background(Color.Black.copy(alpha = .78f)).padding(12.dp)
     if (mode == RecordingMode.Script) {
-        // Manual reading remains useful before the matcher/session wiring lands.
-        val scroll = rememberScrollState()
-        Box(scrim.testTag("teleprompter-overlay").heightIn(max = 104.dp)) {
-            Text(script, color = Color.White, fontSize = 22.sp, lineHeight = 30.sp,
-                modifier = Modifier.verticalScroll(scroll))
+        if (scriptProgress != null) Column(scrim.testTag("teleprompter-overlay")) {
+            TeleprompterOverlay(scriptProgress, onScriptNext, onScriptPrevious)
+            // Auto-advance listens through the offline caption model; manual navigation works without it.
+            if (!installed || !enabled) Text(stringResource(R.string.script_manual_only), color = Color.White,
+                fontSize = 14.sp, modifier = Modifier.padding(top = 4.dp))
         }
     } else if (!installed || !enabled) {
         Column(scrim.testTag("transcript-unavailable")) {

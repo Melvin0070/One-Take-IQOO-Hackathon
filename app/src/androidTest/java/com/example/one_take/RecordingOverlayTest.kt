@@ -7,6 +7,7 @@ import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createComposeRule
 import com.example.one_take.captions.CaptionSegment
 import com.example.one_take.ui.theme.OneTakeTheme
+import com.onetake.engine.FuzzyScriptMatcher
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -18,7 +19,7 @@ class RecordingOverlayTest {
         val segments = mutableStateOf(listOf(CaptionSegment(0, 100, "First")))
         compose.setContent {
             OneTakeTheme {
-                RecordingOverlay(RecordingMode.Assisted, "", segments.value, true, true, true, {})
+                RecordingOverlay(RecordingMode.Assisted, null, segments.value, true, true, true, {}, {}, {})
             }
         }
         compose.onNodeWithText("First").assertIsDisplayed()
@@ -43,8 +44,8 @@ class RecordingOverlayTest {
 
     @Test fun scriptOwnsOverlaySlot() {
         compose.setContent {
-            RecordingOverlay(RecordingMode.Script, "Read this script", listOf(CaptionSegment(0, 100, "Spoken")),
-                true, true, true, {})
+            RecordingOverlay(RecordingMode.Script, FuzzyScriptMatcher("Read this script").progress, listOf(CaptionSegment(0, 100, "Spoken")),
+                true, true, true, {}, {}, {})
         }
         compose.onNodeWithTag("teleprompter-overlay").assertIsDisplayed()
         compose.onNodeWithText("Read this script").assertIsDisplayed()
@@ -56,7 +57,7 @@ class RecordingOverlayTest {
         var opens = 0
         val recording = mutableStateOf(false)
         compose.setContent {
-            RecordingOverlay(RecordingMode.Assisted, "", emptyList(), recording.value, false, false, { opens++ })
+            RecordingOverlay(RecordingMode.Assisted, null, emptyList(), recording.value, false, false, { opens++ }, {}, {})
         }
         compose.onNodeWithText("Add live transcript").performClick()
         assertEquals(1, opens)

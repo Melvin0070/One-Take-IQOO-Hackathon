@@ -22,9 +22,7 @@ It must consume this selected mode and accepted script when creating the new ses
 This change does not claim mode/script journaling, new detectors, or analysis/editor handoff.
 The current live-caption session and recording finalization remain in use.
 
-`RecordingOverlay` provides a manually scrollable script view so entry has a usable camera destination.
-[#58](https://github.com/Melvin0070/One-Take-IQOO-Hackathon/issues/58) should replace that branch with the matcher-driven view after [#48](https://github.com/Melvin0070/One-Take-IQOO-Hackathon/issues/48) and #57 land.
-Automatic progress and skip events are not implemented here.
+`RecordingOverlay`'s Script Mode branch now renders the matcher-driven teleprompter from [#58](https://github.com/Melvin0070/One-Take-IQOO-Hackathon/issues/58), fed by live caption segments ahead of #57; see [script matching verification](script-matching-verification.md).
 The Projects button opens the current Library; project migration and editing remain #53/#63.
 
 ## Verification

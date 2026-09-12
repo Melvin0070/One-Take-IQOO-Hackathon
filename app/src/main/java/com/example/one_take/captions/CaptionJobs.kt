@@ -41,6 +41,7 @@ internal class CaptionJobs private constructor(context: Context) {
     private var live: LiveCaptionSession? = null
     private var liveCaptionsEnabled = false
     private var finalized: CompletableDeferred<File>? = null
+    private var scriptDrain: CompletableDeferred<Unit>? = null
     private var referenceAudio: Deferred<FloatArray>? = null
     /** Monotonic stage timings for target-device benchmarks; never inferred from UI polling. */
     var referenceDecodeMs = 0L
@@ -66,7 +67,7 @@ internal class CaptionJobs private constructor(context: Context) {
     val liveActive get() = liveCaptionsEnabled && live != null
 
     /** Start before CameraX so its original recording retains microphone priority. */
-    fun startLive(engineSession: () -> String? = { null }): Boolean {
+    fun startLive(onScriptSegments: ((List<CaptionSegment>) -> Unit)? = null, engineSession: () -> String? = { null }): Boolean {
         if (busy) return false
         usedLiveCaptions = false
         liveWindowCount = 0
@@ -104,6 +105,8 @@ internal class CaptionJobs private constructor(context: Context) {
         liveCaptionsEnabled = captionsEnabled
         val resultFile = CompletableDeferred<File>()
         finalized = resultFile
+        val finishedScript = onScriptSegments?.let { CompletableDeferred<Unit>() }
+        scriptDrain = finishedScript
         sourcePath = null
         error = null
         exportedFile = null
@@ -125,6 +128,7 @@ internal class CaptionJobs private constructor(context: Context) {
                         withContext(Dispatchers.Main.immediate) {
                             liveText = segments.lastOrNull()?.text
                             liveSegments = segments.toList()
+                            onScriptSegments?.invoke(segments)
                             engineSession()?.let { LiveCaptureCoordinator.get(app).transcript(it, segments) }
                             liveWindowCount = session.completedWindows
                         }
@@ -132,6 +136,7 @@ internal class CaptionJobs private constructor(context: Context) {
                 } else {
                     emptyList()
                 }
+                finishedScript?.complete(Unit)
                 val source = resultFile.await()
                 sourcePath = source.absolutePath
                 if (!captionsEnabled) {
@@ -184,6 +189,8 @@ internal class CaptionJobs private constructor(context: Context) {
                 withContext(NonCancellable) { session.microphone.awaitStopped() }
                 live = null
                 liveCaptionsEnabled = false
+                finishedScript?.complete(Unit)
+                scriptDrain = null
                 finalized = null
                 referenceAudio?.cancel()
                 referenceAudio = null
@@ -223,15 +230,20 @@ internal class CaptionJobs private constructor(context: Context) {
      */
     fun captureFinalizationBarrier(): (suspend (String?) -> Unit)? {
         val session = live ?: return null
-        return { sessionId -> drainLiveCapture(session, sessionId) }
+        val pendingScript = scriptDrain
+        return { sessionId -> drainLiveCapture(session, sessionId, pendingScript) }
     }
 
-    private suspend fun drainLiveCapture(session: LiveCaptionSession, sessionId: String?) {
+    private suspend fun drainLiveCapture(session: LiveCaptionSession, sessionId: String?, pendingScript: CompletableDeferred<Unit>?) {
         withContext(Dispatchers.Main.immediate) {
             if (live === session) noteStopRequested()
         }
         session.microphone.stop()
         session.microphone.awaitStopped()
+        // Script events must reach the existing ledger before SourceFinalized closes it.
+        // This waits only for recognition, not the caption job that awaits the finalized file.
+        pendingScript?.await()
+        if (pendingScript != null) LiveCaptureCoordinator.get(app).flush()
 
         val candidates = session.microphone.pauseCandidates()
         if (sessionId != null && candidates.isNotEmpty()) {

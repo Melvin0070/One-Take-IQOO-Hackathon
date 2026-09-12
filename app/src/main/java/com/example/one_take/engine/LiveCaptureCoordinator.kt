@@ -109,6 +109,14 @@ internal class LiveCaptureCoordinator private constructor(context: Context) {
         } }
     }
 
+    fun scriptEvent(session: String, sample: Long, change: Change, clock: ClockDomain) {
+        require(change is Change.ScriptProgressObserved || change is Change.TakeAttemptObserved)
+        scope.launch { guarded {
+            if (session !in active) return@guarded
+            if (store.snapshot(session).phase in runningPhases) store.append(session, sample, change, clock)
+        } }
+    }
+
     /** Unreconciled ASR stays in its own clock domain and never changes final captions. */
     fun transcript(session: String, segments: List<CaptionSegment>) {
         val last = segments.lastOrNull() ?: return

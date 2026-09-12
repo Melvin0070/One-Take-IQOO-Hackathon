@@ -7,6 +7,7 @@ import com.example.one_take.director.CaptureGuidance
 import com.example.one_take.director.CaptureGuidancePrompt
 import com.example.one_take.director.DirectorPrompt
 import com.example.one_take.director.DirectorSignals
+import com.onetake.engine.ScriptProgress
 
 import android.app.Activity
 import android.content.Context
@@ -70,7 +71,9 @@ internal fun CameraScreen(
     liveSegments: List<CaptionSegment>? = null,
     pauseCandidateCount: Int = 0,
     mode: RecordingMode = RecordingMode.Assisted,
-    script: String = "",
+    scriptProgress: ScriptProgress? = null,
+    onScriptNext: () -> Unit = {},
+    onScriptPrevious: () -> Unit = {},
     transcriptInstalled: Boolean = true,
     transcriptEnabled: Boolean = true,
 ) {
@@ -211,8 +214,8 @@ internal fun CameraScreen(
                         .clip(RoundedCornerShape(6.dp)).background(if (recording) Color(0xFFD32F2F) else Color.Black.copy(alpha = .75f))
                         .padding(horizontal = 12.dp, vertical = 6.dp))
             }
-            RecordingOverlay(mode, script, liveSegments.orEmpty(), !idle,
-                transcriptInstalled, transcriptEnabled, onOpenFeatures,
+            RecordingOverlay(mode, scriptProgress, liveSegments.orEmpty(), !idle,
+                transcriptInstalled, transcriptEnabled, onOpenFeatures, onScriptNext, onScriptPrevious,
                 Modifier.align(Alignment.TopCenter).padding(start = 16.dp, end = 16.dp, top = 112.dp))
             if (idle) setupPrompt?.let { GuidanceChip(it.message, Modifier.align(Alignment.BottomCenter).padding(bottom = 148.dp)) }
             if (recording) directorPrompt?.let {
