@@ -70,7 +70,7 @@ internal class CaptionJobs private constructor(context: Context) {
     val liveActive get() = liveCaptionsEnabled && live != null
 
     /** Start before CameraX so its original recording retains microphone priority. */
-    fun startLive(onScriptSegments: ((List<CaptionSegment>) -> Unit)? = null, engineSession: () -> String? = { null }): Boolean {
+    fun startLive(onCommittedSegments: ((List<CaptionSegment>) -> Unit)? = null, engineSession: () -> String? = { null }): Boolean {
         if (busy) return false
         usedLiveCaptions = false
         liveWindowCount = 0
@@ -109,7 +109,7 @@ internal class CaptionJobs private constructor(context: Context) {
         liveCaptionsEnabled = captionsEnabled
         val resultFile = CompletableDeferred<File>()
         finalized = resultFile
-        val finishedScript = onScriptSegments?.let { CompletableDeferred<Unit>() }
+        val finishedScript = onCommittedSegments?.let { CompletableDeferred<Unit>() }
         scriptDrain = finishedScript
         sourcePath = null
         error = null
@@ -132,7 +132,7 @@ internal class CaptionJobs private constructor(context: Context) {
                         withContext(Dispatchers.Main.immediate) {
                             liveText = segments.lastOrNull()?.text
                             liveSegments = segments.toList()
-                            onScriptSegments?.invoke(segments)
+                            onCommittedSegments?.invoke(segments)
                             engineSession()?.let { LiveCaptureCoordinator.get(app).transcript(it, segments) }
                             liveWindowCount = session.completedWindows
                         }
@@ -249,7 +249,7 @@ internal class CaptionJobs private constructor(context: Context) {
         }
         session.microphone.stop()
         session.microphone.awaitStopped()
-        // Script events must reach the existing ledger before SourceFinalized closes it.
+        // Transcript and script events must reach the existing ledger before SourceFinalized closes it.
         // This waits only for recognition, not the caption job that awaits the finalized file.
         pendingScript?.await()
         if (pendingScript != null) LiveCaptureCoordinator.get(app).flush()
