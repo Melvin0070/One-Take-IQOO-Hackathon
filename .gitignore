@@ -20,6 +20,9 @@ tools/device-monitor/.cache/
 tools/device-monitor/runs/
 .env
 
+# Build outputs for the archived Android runtime module
+/experiments/recorder-engine-android/build/
+
 # Build outputs for the nine-module graph
 /*/build/
 /build/

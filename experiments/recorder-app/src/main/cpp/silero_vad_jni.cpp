@@ -155,24 +155,24 @@ Java_com_example_one_1take_audio_SileroSpeechClassifier_nativeClassify(
         jlong handle,
         jfloatArray samples) {
     if (handle == 0 || samples == nullptr || env->GetArrayLength(samples) != kFrameSamples) {
-        return -1;
+        return -2;
     }
 
     auto * classifier = reinterpret_cast<NativeSileroClassifier *>(handle);
     if (classifier->context == nullptr) {
-        return -1;
+        return -2;
     }
 
     std::array<float, kFrameSamples> values{};
     env->GetFloatArrayRegion(samples, 0, kFrameSamples, values.data());
     if (env->ExceptionCheck()) {
         env->ExceptionClear();
-        return -1;
+        return -2;
     }
 
     for (const float value : values) {
         if (!std::isfinite(value) || value < -1.0f || value > 1.0f) {
-            return -1;
+            return -2;
         }
     }
 
@@ -180,7 +180,7 @@ Java_com_example_one_1take_audio_SileroSpeechClassifier_nativeClassify(
         const int probability_count_before = whisper_vad_n_probs(classifier->context);
         float * probabilities_before = whisper_vad_probs(classifier->context);
         if (probability_count_before != 1 || probabilities_before == nullptr) {
-            return -1;
+            return -2;
         }
         probabilities_before[0] = std::numeric_limits<float>::quiet_NaN();
 
@@ -193,7 +193,7 @@ Java_com_example_one_1take_audio_SileroSpeechClassifier_nativeClassify(
         if (!computed || whisper_vad_n_probs(classifier->context) != 1 || probabilities == nullptr ||
                 !std::isfinite(probabilities[0])) {
             whisper_vad_reset_state(classifier->context);
-            return -1;
+            return -2;
         }
 
         const float probability = probabilities[0];
@@ -203,10 +203,12 @@ Java_com_example_one_1take_audio_SileroSpeechClassifier_nativeClassify(
         if (probability <= kNonSpeechProbability) {
             return 0;
         }
+        // A valid probability between the two thresholds is uncertainty,
+        // not a failed computation. Keep the recurrent state for the next frame.
         return -1;
     } catch (...) {
         whisper_vad_reset_state(classifier->context);
-        return -1;
+        return -2;
     }
 }
 

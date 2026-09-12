@@ -9,11 +9,21 @@ import android.util.Size
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
 import androidx.core.content.ContextCompat
+import com.example.one_take.inference.AppInferenceModel
+import com.example.one_take.inference.AppInferenceRuntime
+import com.example.one_take.inference.AppInferenceSessions
+import com.example.one_take.inference.InferenceDiagnostics
 import com.google.mediapipe.framework.image.BitmapImageBuilder
+import com.google.mediapipe.framework.image.MPImage
 import com.google.mediapipe.tasks.core.BaseOptions
 import com.google.mediapipe.tasks.core.Delegate
 import com.google.mediapipe.tasks.vision.core.RunningMode
 import com.google.mediapipe.tasks.vision.facelandmarker.FaceLandmarker
+import com.google.mediapipe.tasks.vision.facelandmarker.FaceLandmarkerResult
+import com.onetake.engine.inference.BackendKind
+import com.onetake.engine.inference.BackendPolicy
+import com.onetake.engine.inference.InferenceSession
+import com.onetake.engine.inference.ModelSpec
 import java.util.concurrent.Executor
 import java.util.concurrent.Executors
 import kotlin.math.abs
@@ -31,7 +41,9 @@ import kotlin.math.min
 internal class FaceTracker(
     context: Context,
     private val onObservation: (FaceObservation?) -> Unit,
-    private val onError: (String) -> Unit
+    private val onError: (String) -> Unit,
+    private val policy: BackendPolicy = BackendPolicy.NPU_PREFERRED,
+    private val diagnostics: InferenceDiagnostics = AppInferenceRuntime.diagnostics,
 ) {
     companion object {
         private const val MODEL_ASSET = "face_landmarker.task"
@@ -55,7 +67,7 @@ internal class FaceTracker(
     }
     private val stateLock = Any()
     @Volatile private var released = false
-    private var landmarker: FaceLandmarker? = null
+    private var inferenceSession: InferenceSession<FaceInferenceRequest, FaceLandmarkerResult>? = null
     private var lastAnalyzedAt = 0L
     private var analysisGeneration = 0L
     private var consecutiveDetectionErrors = 0
@@ -91,39 +103,60 @@ internal class FaceTracker(
     }
 
     fun release() {
+        var sessionToClose: InferenceSession<FaceInferenceRequest, FaceLandmarkerResult>? = null
         synchronized(stateLock) {
             if (released) return
             released = true
             analysisGeneration++
-            runCatching { landmarker?.close() }
-            landmarker = null
+            sessionToClose = inferenceSession
+            inferenceSession = null
         }
+        // ManagedInferenceSession.close waits for a detection already in
+        // progress before its delegate closes the MediaPipe landmarker.
+        runCatching { sessionToClose?.close() }
         analysisExecutor.shutdownNow()
     }
 
     private fun initializeLandmarker() {
+        var preparedSession: InferenceSession<FaceInferenceRequest, FaceLandmarkerResult>? = null
         try {
-            val baseOptions = BaseOptions.builder()
-                .setModelAssetPath(MODEL_ASSET)
-                .setDelegate(Delegate.CPU)
-                .build()
-            val options = FaceLandmarker.FaceLandmarkerOptions.builder()
-                .setBaseOptions(baseOptions)
-                .setRunningMode(RunningMode.VIDEO)
-                .setNumFaces(1)
-                .setMinFaceDetectionConfidence(0.5f)
-                .setMinFacePresenceConfidence(0.5f)
-                .setMinTrackingConfidence(0.5f)
-                .build()
-            val created = FaceLandmarker.createFromOptions(applicationContext, options)
+            preparedSession = AppInferenceSessions.open<FaceInferenceRequest, FaceLandmarkerResult>(
+                model = AppInferenceModel.FACE_LANDMARKER,
+                policy = policy,
+                diagnostics = diagnostics,
+            ) { modelSpec ->
+                val baseOptions = BaseOptions.builder()
+                    .setModelAssetPath(MODEL_ASSET)
+                    .setDelegate(Delegate.CPU)
+                    .build()
+                val options = FaceLandmarker.FaceLandmarkerOptions.builder()
+                    .setBaseOptions(baseOptions)
+                    .setRunningMode(RunningMode.VIDEO)
+                    .setNumFaces(1)
+                    .setMinFaceDetectionConfidence(0.5f)
+                    .setMinFacePresenceConfidence(0.5f)
+                    .setMinTrackingConfidence(0.5f)
+                    .build()
+                val created = FaceLandmarker.createFromOptions(applicationContext, options)
+                object : InferenceSession<FaceInferenceRequest, FaceLandmarkerResult> {
+                    override val model: ModelSpec = modelSpec
+                    override val backend: BackendKind = BackendKind.CPU
+
+                    override fun execute(input: FaceInferenceRequest): FaceLandmarkerResult =
+                        created.detectForVideo(input.image, input.timestampMs)
+
+                    override fun close() = created.close()
+                }
+            }
             synchronized(stateLock) {
                 if (released) {
-                    created.close()
+                    preparedSession?.close()
                 } else {
-                    landmarker = created
+                    inferenceSession = preparedSession
                 }
             }
         } catch (_: Throwable) {
+            runCatching { preparedSession?.close() }
             reportError()
         }
     }
@@ -137,12 +170,11 @@ internal class FaceTracker(
             val bitmap = imageToBitmap(image) ?: return
             try {
                 val mpImage = BitmapImageBuilder(bitmap).build()
+                val session = synchronized(stateLock) {
+                    if (released || generation != analysisGeneration) null else inferenceSession
+                }
                 val result = try {
-                    synchronized(stateLock) {
-                        if (released || generation != analysisGeneration) return@synchronized null
-                        val currentLandmarker = landmarker ?: return@synchronized null
-                        currentLandmarker.detectForVideo(mpImage, now)
-                    }
+                    session?.execute(FaceInferenceRequest(mpImage, now))
                 } finally {
                     mpImage.close()
                 }
@@ -187,7 +219,7 @@ internal class FaceTracker(
     }
 
     private fun toObservation(
-        result: com.google.mediapipe.tasks.vision.facelandmarker.FaceLandmarkerResult,
+        result: FaceLandmarkerResult,
         bitmap: Bitmap,
         timestampMs: Long
     ): FaceObservation? {
@@ -228,6 +260,12 @@ internal class FaceTracker(
             offAxis = offAxis
         )
     }
+
+    /** Typed input for one serialized MediaPipe detection. */
+    private data class FaceInferenceRequest(
+        val image: MPImage,
+        val timestampMs: Long,
+    )
 
     private fun isOffAxis(
         landmarks: List<com.google.mediapipe.tasks.components.containers.NormalizedLandmark>

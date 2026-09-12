@@ -3,6 +3,8 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
+// Historical prototype build snapshot. This module is excluded from the root build.
+
 android {
     namespace = "com.example.one_take"
     ndkVersion = "30.0.16248370"
@@ -42,13 +44,20 @@ android {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
+    packaging {
+        jniLibs {
+            // QNN opens its backend and DSP skeleton by filesystem path.
+            useLegacyPackaging = true
+            keepDebugSymbols += "**/libQnnHtpV81Skel.so"
+        }
+    }
     buildFeatures {
         compose = true
     }
 }
 
 dependencies {
-    implementation(project(":engine"))
+    implementation(project(":engine-android"))
     implementation("androidx.media3:media3-transformer:1.11.0")
     implementation("androidx.media3:media3-effect:1.11.0")
     implementation("androidx.media3:media3-exoplayer:1.11.0")
