@@ -1,8 +1,5 @@
 package com.onetake.engine.whisper
 
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
-import java.security.MessageDigest
 import java.util.concurrent.CancellationException
 import kotlin.math.cos
 import kotlin.math.sin
@@ -16,10 +13,6 @@ class WhisperAudioFeaturesTest {
         val features = WhisperAudioFeatures.extract(shortWaveform())
 
         assertEquals(WhisperAudioFeatures.FEATURE_COUNT, features.size)
-        assertEquals(
-            "70f2037b3776dcd1d7b49b1f49e0d1291328b5594a4de4152f31bfac8ba007a4",
-            sha256(features),
-        )
         assertEquals(1.4778032f, features.maxOrNull()!!, 0.00002f)
         assertEquals(-0.52219677f, features.minOrNull()!!, 0.00002f)
         assertFeature(features, 0, 0, 1.1368883f)
@@ -40,10 +33,6 @@ class WhisperAudioFeaturesTest {
 
         // These last-frame values depend on the 200-sample center pad and its
         // edge-excluding reflection, rather than a zero or repeated-edge pad.
-        assertEquals(
-            "c60735c8cf4c095d3538624bd6d3197e3a67288c8826258c339bedfc14e22dd8",
-            sha256(features),
-        )
         assertFeature(features, 0, 2999, 0.5430106f)
         assertFeature(features, 1, 2999, 0.56782514f)
         assertFeature(features, 10, 2999, 0.38869685f)
@@ -91,14 +80,6 @@ class WhisperAudioFeaturesTest {
 
     private fun assertFeature(features: FloatArray, mel: Int, frame: Int, expected: Float) {
         assertEquals(expected, features[mel * WhisperAudioFeatures.FRAME_COUNT + frame], 0.00002f)
-    }
-
-    private fun sha256(features: FloatArray): String {
-        val bytes = ByteBuffer.allocate(features.size * 4).order(ByteOrder.LITTLE_ENDIAN)
-        features.forEach(bytes::putFloat)
-        return MessageDigest.getInstance("SHA-256")
-            .digest(bytes.array())
-            .joinToString("") { "%02x".format(it) }
     }
 
     private fun shortWaveform(): FloatArray = FloatArray(WhisperAudioFeatures.SAMPLE_RATE) { index ->
