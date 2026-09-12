@@ -27,7 +27,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-private enum class AppScreen { Camera, Review, Library, Features }
+private enum class AppScreen { Home, ScriptEntry, Camera, Review, Library, Features }
 
 @Composable
 internal fun VideoRecorderApp() {
@@ -40,7 +40,12 @@ internal fun VideoRecorderApp() {
     var featureReturn by rememberSaveable { mutableStateOf(AppScreen.Camera) }
     val store = recorder.videoStore
     val scope = rememberCoroutineScope()
-    var screen by rememberSaveable { mutableStateOf(AppScreen.Camera) }
+    var screen by rememberSaveable { mutableStateOf(AppScreen.Home) }
+    var mode by rememberSaveable { mutableStateOf(RecordingMode.Assisted) }
+    val setup = remember { RecordingSetupStore(context) }
+    // Keep potentially long scripts out of the saved-instance-state Binder bundle.
+    var script by remember { mutableStateOf(setup.script) }
+    var libraryReturn by rememberSaveable { mutableStateOf(AppScreen.Home) }
     var lensFacing by rememberSaveable { mutableIntStateOf(CameraSelector.LENS_FACING_BACK) }
     val captureState = recorder.captureState
     var cameraReady by remember { mutableStateOf(false) }
@@ -61,7 +66,10 @@ internal fun VideoRecorderApp() {
 
     fun message(text: String) { scope.launch { snackbar.showSnackbar(text) } }
     LaunchedEffect(liveEngine.error) { liveEngine.error?.let { snackbar.showSnackbar(it) } }
-    fun openLibrary() { cameraReady = false; reviewPath = null; screen = AppScreen.Library; refresh++ }
+    fun openLibrary() {
+        if (screen == AppScreen.Home || screen == AppScreen.Camera) libraryReturn = screen
+        cameraReady = false; reviewPath = null; screen = AppScreen.Library; refresh++
+    }
 
     DisposableEffect(recorder) {
         recorder.setListener(object : CameraRecorder.Listener {
@@ -124,8 +132,13 @@ internal fun VideoRecorderApp() {
         }
     }
     BackHandler(screen == AppScreen.Features) { screen = featureReturn }
+    BackHandler(screen == AppScreen.ScriptEntry) { screen = AppScreen.Home }
     BackHandler(screen == AppScreen.Review && deletePath == null) { openLibrary() }
-    BackHandler(screen == AppScreen.Library && deletePath == null) { screen = AppScreen.Camera }
+    BackHandler(screen == AppScreen.Library && deletePath == null) { screen = libraryReturn }
+    BackHandler(screen == AppScreen.Camera && captureState == CaptureUiState.Idle) {
+        cameraReady = false
+        screen = AppScreen.Home
+    }
     BackHandler(screen == AppScreen.Camera && captureState != CaptureUiState.Idle) {
         captionJobs.noteStopRequested()
         recorder.stopRecording()
@@ -133,6 +146,14 @@ internal fun VideoRecorderApp() {
 
     Box(Modifier.fillMaxSize()) {
         when (screen) {
+            AppScreen.Home -> HomeScreen(onSelectMode = {
+                mode = it
+                cameraReady = false
+                screen = if (it == RecordingMode.Script) AppScreen.ScriptEntry else AppScreen.Camera
+            }, onOpenProjects = ::openLibrary)
+            AppScreen.ScriptEntry -> ScriptEntryScreen(setup,
+                onBack = { screen = AppScreen.Home },
+                onContinue = { script = it; cameraReady = false; screen = AppScreen.Camera })
             AppScreen.Camera -> CameraPermissionGate(onOpenLibrary = ::openLibrary) {
                 CameraScreen(
                     recorder, lifecycleOwner, lensFacing, retryToken, captureState,
@@ -161,6 +182,10 @@ internal fun VideoRecorderApp() {
                         else if (captionJobs.busy && captureState == CaptureUiState.Idle) stringResource(R.string.caption_other_job) else null,
                     captureBlocked = captionJobs.busy,
                     liveSegments = captionJobs.liveSegments,
+                    mode = mode,
+                    script = if (mode == RecordingMode.Script) script else "",
+                    transcriptInstalled = features.installed,
+                    transcriptEnabled = features.enabled,
                     pauseCandidateCount = liveEngine.pauseCount(recorder.activeEngineSessionId),
                     onOpenLibrary = ::openLibrary,
                     libraryVersion = refresh,
@@ -169,7 +194,7 @@ internal fun VideoRecorderApp() {
             }
             AppScreen.Features -> FeatureMarketplaceScreen(features, onBack = { screen = featureReturn })
             AppScreen.Library -> LibraryScreen(videos, libraryLoading,
-                onRecord = { cameraReady = false; screen = AppScreen.Camera },
+                onRecord = { cameraReady = false; mode = RecordingMode.Assisted; screen = AppScreen.Camera },
                 onOpen = { file -> reviewPath = file.absolutePath; reviewingSaved = true; screen = AppScreen.Review },
                 onDelete = {
                     if (captionJobs.busy && captionJobs.sourcePath == it.absolutePath) message(captionBusyMessage)

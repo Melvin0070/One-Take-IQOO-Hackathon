@@ -34,6 +34,7 @@ class EditFeatureTest {
     @Test fun editsExportWithoutCaptionsWithoutChangingOriginal() = verifyEditedExport(false)
 
     private fun verifyEditedExport(withCaptions: Boolean) {
+        compose.onNodeWithText("Assisted Mode").performClick()
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
         val store = VideoStore(context.filesDir)

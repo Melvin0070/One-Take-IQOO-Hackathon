@@ -82,6 +82,7 @@ class LiveEngineLifecycleTest {
 
         // Permission grants can race the first composition of the rule.
         compose.activityRule.scenario.recreate()
+        compose.onNodeWithText("Assisted Mode").performClick()
         waitForEnabledContentDescription(START_RECORDING)
     }
 

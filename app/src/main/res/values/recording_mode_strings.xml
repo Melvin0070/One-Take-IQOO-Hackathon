@@ -1,0 +1,23 @@
+<resources>
+    <string name="mode_back">Back</string>
+    <string name="home_title">One Take</string>
+    <string name="home_description">Choose how you want to record.</string>
+    <string name="script_mode">Script Mode</string>
+    <string name="script_mode_description">Bring a script and read it while you record.</string>
+    <string name="assisted_mode">Assisted Mode</string>
+    <string name="assisted_mode_description">Speak freely with a live transcript.</string>
+    <string name="projects">Projects</string>
+    <string name="script_entry_title">Your script</string>
+    <string name="script_input">Enter or paste your script</string>
+    <plurals name="script_word_count">
+        <item quantity="one">%1$d word</item>
+        <item quantity="other">%1$d words</item>
+    </plurals>
+    <string name="paste_script">Paste from Clipboard</string>
+    <string name="continue_to_camera">Continue</string>
+    <string name="script_save_error">Could not save your script. Please try again.</string>
+    <string name="transcript_install">Add live transcript</string>
+    <string name="transcript_enable">Enable live transcript</string>
+    <string name="transcript_optional">You can record without a transcript.</string>
+    <string name="transcript_ready">Your words will appear here while recording.</string>
+</resources>

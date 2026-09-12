@@ -26,6 +26,19 @@ Metric availability depends on the connected phone; GPU and NPU utilization requ
 
 ## Camera controls
 
+Launch opens Home with Script Mode, Assisted Mode, and a Projects entry point to the existing saved-video library.
+Back from an idle camera returns Home; Back during recording still finalizes the recording safely.
+
+Script Mode opens a multiline editor with word count and Paste from Clipboard.
+Drafts persist locally, and Continue saves the camera script before clearing the draft.
+The script is readable in a manually scrollable overlay near the top of the preview.
+Automatic advancement awaits the script matcher and teleprompter integration (#48, #57, #58).
+
+Assisted Mode uses the same preview slot for the newest three wrapped transcript lines.
+Offline Captions must be installed and enabled for live recognition.
+The overlay links to the marketplace when idle, and missing captions never block recording.
+The complete transcript remains in the existing caption pipeline; the three-line limit applies only to display.
+
 The camera uses a large preview with black framing and an outlined record button.
 Tap the top-left menu or quality badge to choose recording quality and toggle the composition grid or sensor level.
 These settings persist between launches.
@@ -107,7 +120,7 @@ See [current verification](docs/verification-current.md) for the latest build re
 
 Run `./gradlew :engine:test` to verify the engine without Android or a connected phone.
 The [engine foundation contract](docs/engine-foundation.md) describes ordering, persistence, migration, and current limits.
-Script workflows and performance optimization are intentionally deferred.
+Script matching, the new mode-aware engine session integration, and performance optimization remain separate work.
 
 Use Android Studio's configured Gradle JDK, or set `JAVA_HOME` to a suitable installed JDK in your terminal.
 

@@ -69,6 +69,10 @@ internal fun CameraScreen(
     captureBlocked: Boolean = false,
     liveSegments: List<CaptionSegment>? = null,
     pauseCandidateCount: Int = 0,
+    mode: RecordingMode = RecordingMode.Assisted,
+    script: String = "",
+    transcriptInstalled: Boolean = true,
+    transcriptEnabled: Boolean = true,
 ) {
     val context = LocalContext.current
     val captionStyle = remember { CaptionStyleStore.get(context) }
@@ -207,9 +211,12 @@ internal fun CameraScreen(
                         .clip(RoundedCornerShape(6.dp)).background(if (recording) Color(0xFFD32F2F) else Color.Black.copy(alpha = .75f))
                         .padding(horizontal = 12.dp, vertical = 6.dp))
             }
-            if (idle) setupPrompt?.let { GuidanceChip(it.message, Modifier.align(Alignment.TopCenter).padding(top = 116.dp)) }
+            RecordingOverlay(mode, script, liveSegments.orEmpty(), !idle,
+                transcriptInstalled, transcriptEnabled, onOpenFeatures,
+                Modifier.align(Alignment.TopCenter).padding(start = 16.dp, end = 16.dp, top = 112.dp))
+            if (idle) setupPrompt?.let { GuidanceChip(it.message, Modifier.align(Alignment.BottomCenter).padding(bottom = 148.dp)) }
             if (recording) directorPrompt?.let {
-                GuidanceChip(it.message, Modifier.align(Alignment.TopCenter).padding(top = 116.dp))
+                GuidanceChip(it.message, Modifier.align(Alignment.BottomCenter).padding(bottom = 148.dp))
             }
             if (recording && pauseCandidateCount > 0) {
                 Text("$pauseCandidateCount potential pause${if (pauseCandidateCount == 1) "" else "s"}",
@@ -218,7 +225,7 @@ internal fun CameraScreen(
                         .testTag("livePauseCount").clip(RoundedCornerShape(6.dp))
                         .background(Color.Black.copy(alpha = .65f)).padding(horizontal = 10.dp, vertical = 6.dp))
             }
-            if (captionStatus != null) {
+            if (captionStatus != null && idle) {
                 CaptionText(captionStatus, captionStyle.preset,
                     modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth()
                         .padding(start = 20.dp, end = 76.dp, bottom = 26.dp))

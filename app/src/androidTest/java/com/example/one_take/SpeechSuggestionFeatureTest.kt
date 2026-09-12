@@ -43,6 +43,7 @@ class SpeechSuggestionFeatureTest {
     }
 
     @Test fun disabledSuggestionPreviewApplyUndoReopenAndExportPreserveOriginal() {
+        compose.onNodeWithText("Assisted Mode").performClick()
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
         val videos = VideoStore(context.filesDir)
