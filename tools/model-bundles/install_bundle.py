@@ -333,18 +333,24 @@ def download_pinned_archive(
     destination = Path(destination)
     destination.parent.mkdir(parents=True, exist_ok=True)
     request = Request(DOWNLOAD_URL, headers={"Accept-Encoding": "identity", "User-Agent": "OneTake/0.1"})
-    temporary = destination.with_name(destination.name + ".part")
-    temporary.unlink(missing_ok=True)
+    temporary: Path | None = None
     try:
-        with build_opener(_PinnedRedirectHandler).open(request, timeout=timeout_seconds) as response:
-            if response.geturl() != DOWNLOAD_URL:
-                raise InstallError("download did not resolve to the pinned HTTPS release")
-            content_length = response.headers.get("Content-Length")
-            if content_length is not None and int(content_length) > ARCHIVE_SIZE_BYTES:
-                raise InstallError("download exceeds the pinned archive size")
-            digest = hashlib.sha256()
-            total = 0
-            with temporary.open("xb") as output:
+        with tempfile.NamedTemporaryFile(
+            mode="wb",
+            prefix=".onetake-download-",
+            suffix=".part",
+            dir=destination.parent,
+            delete=False,
+        ) as output:
+            temporary = Path(output.name)
+            with build_opener(_PinnedRedirectHandler).open(request, timeout=timeout_seconds) as response:
+                if response.geturl() != DOWNLOAD_URL:
+                    raise InstallError("download did not resolve to the pinned HTTPS release")
+                content_length = response.headers.get("Content-Length")
+                if content_length is not None and int(content_length) > ARCHIVE_SIZE_BYTES:
+                    raise InstallError("download exceeds the pinned archive size")
+                digest = hashlib.sha256()
+                total = 0
                 while True:
                     _check_cancel(cancel)
                     chunk = response.read(BUFFER_SIZE)
@@ -355,18 +361,21 @@ def download_pinned_archive(
                         raise InstallError("download exceeds the pinned archive size")
                     digest.update(chunk)
                     output.write(chunk)
-                output.flush()
-                os.fsync(output.fileno())
+            output.flush()
+            os.fsync(output.fileno())
         if total != ARCHIVE_SIZE_BYTES or digest.hexdigest() != ARCHIVE_SHA256:
             raise InstallError("downloaded archive does not match the pinned release")
+        _check_cancel(cancel)
         os.replace(temporary, destination)
+        temporary = None
         return destination
     except InstallError:
-        temporary.unlink(missing_ok=True)
         raise
     except (HTTPError, URLError, OSError, ValueError) as error:
-        temporary.unlink(missing_ok=True)
         raise InstallError(f"unable to download pinned archive: {error}") from None
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
 
 
 def main(argv: Iterable[str] | None = None) -> int:
@@ -376,11 +385,15 @@ def main(argv: Iterable[str] | None = None) -> int:
     source.add_argument("--download", action="store_true", help="download the pinned HTTPS release")
     parser.add_argument("--destination", type=Path, required=True, help="versioned bundle store")
     args = parser.parse_args(argv)
-    temporary: Path | None = None
+    temporary_directory = None
     try:
         if args.download:
-            temporary = args.destination.with_name(args.destination.name + ".download.zip")
-            archive = download_pinned_archive(temporary)
+            args.destination.parent.mkdir(parents=True, exist_ok=True)
+            temporary_directory = tempfile.TemporaryDirectory(
+                prefix=".onetake-download-",
+                dir=args.destination.parent,
+            )
+            archive = download_pinned_archive(Path(temporary_directory.name) / "archive.zip")
         else:
             archive = args.archive
         installed = install_archive(archive, args.destination)
@@ -395,8 +408,8 @@ def main(argv: Iterable[str] | None = None) -> int:
         print(f"error: {error}")
         return 2
     finally:
-        if temporary is not None:
-            temporary.unlink(missing_ok=True)
+        if temporary_directory is not None:
+            temporary_directory.cleanup()
 
 
 if __name__ == "__main__":
