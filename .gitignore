@@ -19,3 +19,14 @@ __pycache__/
 tools/device-monitor/.cache/
 tools/device-monitor/runs/
 .env
+
+# Build outputs for the nine-module graph
+/*/build/
+/build/
+# Vendored binaries are committed by exception; models never are.
+libs/*.aar
+!libs/README.md
+*.tflite
+*.onnx
+*.bin
+corpus/

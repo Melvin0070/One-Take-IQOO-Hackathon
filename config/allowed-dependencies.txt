@@ -1,0 +1,112 @@
+# P4 — no third-party analytics, ads or crash-reporting SDKs. Enforced by
+# `./gradlew guardDependencies` over every resolved configuration.
+#
+# Format: one `group:name` per line. A trailing `*` is a prefix wildcard.
+# Before you add a line, answer three questions in the commit message:
+#   1. Does it add a manifest permission?          (run guardPermissions after)
+#   2. Does it make a network call, ever?          (P1)
+#   3. Does it ship a second ONNX Runtime or a second QNN runtime? (Contract §2 —
+#      a second libonnxruntime.so fails at dlopen, not at build time)
+
+# --- Kotlin / stdlib ---
+org.jetbrains.kotlin:*
+org.jetbrains.kotlinx:*
+org.jetbrains:annotations
+org.jetbrains.intellij.deps:trove4j
+
+# --- AndroidX core ---
+androidx.core:*
+androidx.annotation:*
+androidx.activity:*
+androidx.appcompat:*
+androidx.lifecycle:*
+androidx.savedstate:*
+androidx.arch.core:*
+androidx.collection:*
+androidx.concurrent:*
+androidx.tracing:*
+androidx.versionedparcelable:*
+androidx.customview:*
+androidx.interpolator:*
+androidx.loader:*
+androidx.fragment:*
+androidx.emoji2:*
+androidx.profileinstaller:*
+androidx.startup:*
+androidx.autofill:*
+androidx.exifinterface:*
+androidx.datastore:*
+androidx.window:*
+androidx.graphics:*
+androidx.resourceinspection:*
+
+# --- Compose ---
+androidx.compose:*
+androidx.compose.animation:*
+androidx.compose.foundation:*
+androidx.compose.material:*
+androidx.compose.material3:*
+androidx.compose.runtime:*
+androidx.compose.ui:*
+
+# --- CameraX (:capture) ---
+androidx.camera:*
+
+# --- Media3 (:media) ---
+androidx.media3:*
+androidx.media:*
+
+# --- AndroidX transitives pulled in by CameraX / Media3 / Compose ---
+# Added 2026-09-12 after `guardDependencies` caught them. All first-party AndroidX,
+# none adds a permission or a network call. Re-run the guard whenever a dep changes
+# rather than pre-emptively widening this list.
+androidx.camera.viewfinder:*
+androidx.camera.featurecombinationquery:*
+androidx.cursoradapter:*
+androidx.documentfile:*
+androidx.drawerlayout:*
+androidx.dynamicanimation:*
+androidx.legacy:*
+androidx.localbroadcastmanager:*
+androidx.print:*
+androidx.recyclerview:*
+androidx.transition:*
+androidx.vectordrawable:*
+androidx.viewpager:*
+
+# --- Annotation-only and DI plumbing dragged in by CameraX ---
+com.google.auto.value:auto-value-annotations
+com.google.dagger:dagger
+javax.inject:javax.inject
+jakarta.inject:jakarta.inject-api
+org.jspecify:jspecify
+
+# --- Test ---
+junit:junit
+org.hamcrest:*
+androidx.test:*
+androidx.test.ext:*
+androidx.test.espresso:*
+org.mockito:*
+net.bytebuddy:*
+org.objenesis:*
+
+# --- Transitive plumbing ---
+com.google.guava:*
+com.google.code.findbugs:jsr305
+com.google.errorprone:*
+com.google.j2objc:*
+org.checkerframework:*
+com.google.protobuf:*
+
+# --- ML runtimes. Exactly these two, no others. (Contract §2) ---
+# sherpa-onnx ships as a VENDORED static-link AAR in libs/, not a Maven
+# coordinate, so it does not appear here. See libs/README.md.
+com.google.ai.edge.litert:*
+
+# --- NEVER ALLOWED. Adding any of these fails P4 and the pitch. ---
+#   com.google.firebase:*        analytics/crashlytics
+#   com.google.android.gms:*     play services
+#   io.sentry:*  com.bugsnag:*  com.datadoghq:*  com.amplitude:*  com.mixpanel:*
+#   com.squareup.okhttp3:*       nothing in the single-phone path makes a network call
+#   com.microsoft.onnxruntime:*  a SECOND ONNX Runtime — dlopen failure, not build failure
