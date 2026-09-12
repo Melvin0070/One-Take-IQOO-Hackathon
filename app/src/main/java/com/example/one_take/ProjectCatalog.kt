@@ -3,6 +3,8 @@ package com.example.one_take
 import android.content.Context
 import com.example.one_take.engine.EngineProjectStore
 import com.example.one_take.engine.recordingTimeline
+import com.example.one_take.projects.Project
+import com.example.one_take.projects.ProjectStore
 import com.onetake.engine.EngineState
 import java.io.File
 import java.util.concurrent.CancellationException
@@ -17,27 +19,39 @@ internal data class ProjectSummary(
     val durationMs: Long? = null,
     val edited: Boolean? = null,
     val detailsUnavailable: Boolean = false,
+    val thumbnailPath: String? = null,
 )
 
-/** Adapts recovered recordings until the full ProjectStore contract (#53) lands. Call on I/O. */
-internal class ProjectCatalog(private val readState: (File) -> EngineState?) {
-    constructor(context: Context) : this(EngineProjectStore(context)::read)
+/** Joins durable project identity/header data with the engine's current edit state. Call on I/O. */
+internal class ProjectCatalog(
+    private val readState: (File) -> EngineState?,
+    private val readProject: ((File) -> Project)?,
+) {
+    constructor(readState: (File) -> EngineState?) : this(readState, null)
+    constructor(context: Context) : this(EngineProjectStore(context)::read,
+        ProjectStore(context).let { store -> { source -> store.getOrCreate(source) } })
 
     fun load(sources: List<File>): List<ProjectSummary> = sources.map { source ->
         val fallback = ProjectSummary(source.absolutePath, source, source.lastModified(), detailsUnavailable = true)
         try {
-            val state = readState(source)
-            if (state == null) fallback else {
-                val script = state.scriptProgress
+            val project = readProject?.invoke(source)
+            val state = try { readState(source) }
+                catch (cancelled: CancellationException) { throw cancelled }
+                catch (_: Exception) { null }
+            if (state == null && project == null) fallback else {
+                val script = state?.scriptProgress
                 ProjectSummary(
-                    id = state.sessionId,
+                    id = project?.id ?: state!!.sessionId,
                     source = source,
-                    createdAt = source.lastModified(),
-                    scriptTitle = script?.chunks?.asSequence()?.flatMap { it.chunk.text.lineSequence() }
+                    createdAt = project?.createdAt ?: source.lastModified(),
+                    scriptTitle = if (project != null) project.scriptText?.lineSequence()?.map(String::trim)?.firstOrNull(String::isNotBlank)
+                        else script?.chunks?.asSequence()?.flatMap { it.chunk.text.lineSequence() }
                         ?.map(String::trim)?.firstOrNull(String::isNotBlank),
-                    mode = if (script != null) RecordingMode.Script else RecordingMode.Assisted,
-                    durationMs = state.durationSamples.takeIf { it > 0 }?.let(recordingTimeline::msFromSamples),
-                    edited = state.edits?.cuts?.any { it.enabled } == true,
+                    mode = project?.mode ?: if (script != null) RecordingMode.Script else RecordingMode.Assisted,
+                    durationMs = project?.durationMs ?: state?.durationSamples?.takeIf { it > 0 }?.let(recordingTimeline::msFromSamples),
+                    edited = if (project?.timelinePath != null) true else state?.let { it.edits?.cuts?.any { cut -> cut.enabled } == true },
+                    detailsUnavailable = state == null,
+                    thumbnailPath = project?.thumbnailPath,
                 )
             }
         } catch (cancelled: CancellationException) {

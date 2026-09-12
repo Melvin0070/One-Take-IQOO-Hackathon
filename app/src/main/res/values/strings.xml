@@ -7,6 +7,10 @@
     <string name="project_details_unavailable">Details unavailable</string>
     <string name="project_duration_unavailable">Duration unavailable</string>
     <string name="retry_projects">Retry</string>
+    <string name="project_open_error">This project could not be loaded.</string>
+    <string name="project_timeline_unavailable">This saved timeline cannot be previewed in this version. You can open the recording without changing the saved timeline.</string>
+    <string name="project_open_original">Open recording</string>
+    <string name="project_back">Back to Projects</string>
     <string name="record_video">Record a video</string>
     <string name="start_recording">Start recording</string>
     <string name="stop_recording">Stop recording</string>

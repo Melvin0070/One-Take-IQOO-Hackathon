@@ -2,13 +2,13 @@
 
 The Home Projects entry, camera thumbnail and permission-screen entry now open a project grid. Each card shows a thumbnail, the first available saved script line (or recording date/time), recording mode, original duration and an Edited indicator when saved cuts are enabled. The entire card opens review; the delete icon retains the existing confirmation.
 
-`ProjectCatalog` is a UI read adapter over the existing `EngineProjectStore`, not a new persistence store. Script titles and Script Mode come from journaled script progress. Recordings without script progress use the legacy Assisted default. Recording file modification time is the date fallback until #53 supplies a manifest creation time. Unreadable history/media retains a visible, deletable card with unavailable details instead of invented zero values. A propagated loading error exposes Retry.
+`ProjectCatalog` now combines [ProjectStore manifests](project-store.md) with the existing engine's current edit state. IDs, creation time, script, mode and thumbnail come from the manifest. Legacy defaults use Assisted mode unless known journaled script data is available. Unreadable history/media retains a visible, deletable card with unavailable details instead of invented zero values. A propagated loading error exposes Retry.
 
-`RecorderContent` first invokes the existing interrupted-recording recovery, then loads summaries on the I/O dispatcher. Returning from review or changing caption/edit revision reloads the cards. Review continues to load the authoritative journal through `CaptionJobs`; no copy of an edit plan is stored in navigation state. VideoStore locking/recovery, CameraRecorder and the original recording path are unchanged.
+`RecorderContent` invokes existing interrupted-recording recovery and idempotent startup migration, then loads summaries on the I/O dispatcher. Returning from review or changing caption/edit revision reloads the cards. `ProjectReviewRoute` resolves project IDs before opening the existing engine-backed review flow. No copy of an edit plan is stored in navigation state. VideoStore locking/recovery, CameraRecorder and the original recording path are unchanged.
 
 ## Remaining integration
 
-This is the UI and existing-editor portion of #63, implemented first at the user's request. #53's manifest/ProjectStore, #54's clip timeline and #64's editor were not present at base `9b7f909`. Project-ID loading and arbitrary reordered-clip reopening remain dependent on those contracts. The persisted-cut test does not claim to satisfy #63's reordered-timeline acceptance test. The issue should remain open until that integration is verified.
+The first increment at `ba90938` supplied the grid and existing-editor route. The #53 follow-up adds manifest-backed identity, loading and deletion. Arbitrary reordered-clip rendering remains dependent on #54/#64. Saved timeline JSON is preserved verbatim, and this build offers an explicit recording fallback when it cannot render it. The storage-order and persisted-cut tests do not claim to satisfy the complete reordered-editor acceptance test; #63 should remain open until that integration is verified.
 
 ## Verification
 

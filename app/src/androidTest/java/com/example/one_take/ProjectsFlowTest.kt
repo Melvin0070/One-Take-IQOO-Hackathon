@@ -25,7 +25,7 @@ class ProjectsFlowTest {
     @After fun cleanup() {
         compose.activityRule.scenario.close()
         owned.forEach { file ->
-            store.deleteVideo(file)
+            com.example.one_take.projects.ProjectStore(context).deleteSource(file)
             EngineProjectStore(context).remove(file)
             com.example.one_take.editing.EditRepository(context).remove(file)
             com.example.one_take.captions.CaptionRepository(context).remove(file)
@@ -117,6 +117,23 @@ class ProjectsFlowTest {
         compose.onNodeWithContentDescription("Delete " + file.name).performClick()
         compose.onNode(hasText("Delete") and hasAnyAncestor(isDialog()), useUnmergedTree = true).performClick()
         compose.waitUntil(10_000) { !file.exists() }
+    }
+
+    @Test fun savedTimelineRemainsInItsOriginalOrderWhenOpeningRecordingFallback() {
+        val file = fixture()
+        val projects = com.example.one_take.projects.ProjectStore(context)
+        val project = projects.getOrCreate(file)
+        val timeline = "{\"version\":1,\"clips\":[{\"id\":\"second\",\"sourceStart\":160000,\"sourceEnd\":480000,\"state\":\"KEEP\",\"reason\":null},{\"id\":\"first\",\"sourceStart\":0,\"sourceEnd\":160000,\"state\":\"KEEP\",\"reason\":null}]}"
+        projects.saveDocuments(project, timelineJson = timeline)
+        openProjects(file)
+        compose.onNodeWithTag(cardTag(file)).performClick()
+        waitForText("Open recording")
+        compose.activityRule.scenario.recreate()
+        waitForText("Open recording")
+        assertEquals(timeline, projects.readBundle(project.id)!!.timelineJson)
+        compose.onNodeWithText("Open recording").performClick()
+        waitForText("Edits")
+        assertEquals(timeline, projects.readBundle(project.id)!!.timelineJson)
     }
 
     private fun fixture(): File {

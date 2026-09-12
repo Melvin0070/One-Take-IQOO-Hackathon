@@ -67,7 +67,7 @@ class RecorderFlowTest {
         waitForNewPendingMarkersToClear()
         videoStore.directory.listFiles()
             ?.filter { it.absolutePath !in preExistingVideoArtifacts && it.extension.equals("mp4", ignoreCase = true) }
-            ?.forEach { videoStore.deleteVideo(it) }
+            ?.forEach { com.example.one_take.projects.ProjectStore(targetContext).deleteSource(it) }
     }
 
     @Test

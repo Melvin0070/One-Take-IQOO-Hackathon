@@ -40,6 +40,7 @@ internal fun VideoRecorderApp() {
     var featureReturn by rememberSaveable { mutableStateOf(AppScreen.Camera) }
     val store = recorder.videoStore
     val projectCatalog = remember { ProjectCatalog(context.applicationContext) }
+    val projectStore = remember { com.example.one_take.projects.ProjectStore(context.applicationContext) }
     val scope = rememberCoroutineScope()
     var screen by rememberSaveable { mutableStateOf(AppScreen.Home) }
     var mode by rememberSaveable { mutableStateOf(RecordingMode.Assisted) }
@@ -68,6 +69,7 @@ internal fun VideoRecorderApp() {
     var retryToken by remember { mutableIntStateOf(0) }
     var elapsedMillis by remember { mutableLongStateOf(0L) }
     var reviewPath by rememberSaveable { mutableStateOf<String?>(null) }
+    var reviewProjectId by rememberSaveable { mutableStateOf<String?>(null) }
     var reviewingSaved by rememberSaveable { mutableStateOf(false) }
     var deletePath by rememberSaveable { mutableStateOf<String?>(null) }
     var deleting by remember { mutableStateOf(false) }
@@ -83,7 +85,15 @@ internal fun VideoRecorderApp() {
     LaunchedEffect(liveEngine.error) { liveEngine.error?.let { snackbar.showSnackbar(it) } }
     fun openLibrary() {
         if (screen == AppScreen.Home || screen == AppScreen.Camera) libraryReturn = screen
-        cameraReady = false; reviewPath = null; screen = AppScreen.Library; refresh++
+        cameraReady = false; reviewPath = null; reviewProjectId = null; screen = AppScreen.Library; refresh++
+    }
+
+    LaunchedEffect(projectStore) {
+        try {
+            val recovered = recorder.recoverVideos()
+            withContext(Dispatchers.IO) { projectStore.migrate(recovered) }
+        } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+        catch (_: Exception) { /* Projects exposes loading errors and retries migration per card. */ }
     }
 
     DisposableEffect(recorder) {
@@ -92,6 +102,7 @@ internal fun VideoRecorderApp() {
             override fun onCameraError(message: String) { cameraReady = false; cameraError = message }
             override fun onRecordingFinalized(file: File) {
                 reviewPath = file.absolutePath
+                reviewProjectId = null
                 reviewingSaved = false
                 screen = AppScreen.Review
                 if (!captionJobs.finishLive(file)) {
@@ -218,17 +229,21 @@ internal fun VideoRecorderApp() {
             AppScreen.Features -> FeatureMarketplaceScreen(features, onBack = { screen = featureReturn })
             AppScreen.Library -> ProjectsScreen(projects, libraryLoading,
                 onRecord = { cameraReady = false; mode = RecordingMode.Assisted; screen = AppScreen.Camera },
-                onOpen = { project -> reviewPath = project.source.absolutePath; reviewingSaved = true; screen = AppScreen.Review },
+                onOpen = { project ->
+                    reviewPath = project.source.absolutePath
+                    reviewProjectId = project.id.takeUnless { it == project.source.absolutePath }
+                    reviewingSaved = true; screen = AppScreen.Review
+                },
                 onDelete = {
                     if (captionJobs.busy && captionJobs.sourcePath == it.source.absolutePath) message(captionBusyMessage)
                     else deletePath = it.source.absolutePath
                 }, loadFailed = libraryFailed, onRetry = { refresh++ })
             AppScreen.Review -> {
                 val path = reviewPath
-                if (path != null) ReviewScreen(File(path), reviewingSaved,
+                if (path != null) ProjectReviewRoute(reviewProjectId, File(path), projectStore, reviewingSaved, mode, script,
                     onRetake = { deletePath = path }, onKeep = ::openLibrary,
                     onOpenFeatures = { featureReturn = AppScreen.Review; screen = AppScreen.Features },
-                    onOpenExport = { file -> reviewPath = file.absolutePath; reviewingSaved = true })
+                    onOpenExport = { file -> reviewPath = file.absolutePath; reviewProjectId = null; reviewingSaved = true })
                 else LaunchedEffect(Unit) { openLibrary() }
             }
         }
@@ -246,7 +261,7 @@ internal fun VideoRecorderApp() {
                     deleting = true
                     scope.launch {
                         val success = withContext(Dispatchers.IO) {
-                            try { store.deleteVideo(file) } catch (_: java.io.IOException) { false }
+                            try { projectStore.deleteSource(file) } catch (_: Exception) { false }
                         }
                         deleting = false
                         deletePath = null
