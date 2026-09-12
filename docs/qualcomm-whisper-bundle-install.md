@@ -1,8 +1,5 @@
 # Qualcomm Whisper bundle installation
 
-> Historical prototype record: the implementation and measurements described here are archived under `experiments/` and excluded from the current nine-module build.
-> Run the historical build commands from the [tested prototype checkout](../experiments/AGENTS.md), not from the current repository root.
-
 This slice prepares the public Qualcomm Whisper Tiny Voice AI v0.61.0 release for the iQOO 15 caption runtime.
 The target identity is I2501 / SM8850 / V81.
 The graph runtime still owns execution, while this installer owns artifact acquisition, integrity, and lifecycle.
@@ -11,7 +8,7 @@ The graph runtime still owns execution, while this installer owns artifact acqui
 
 The archive URL is pinned to the v0.61.0 Voice AI asset for Snapdragon 8 Elite Gen 5 for Galaxy.
 The archive is 106,106,008 bytes with SHA-256 `086017959cd4e208c0711c0297d8d9d2e5031677082a1e2063651519917f9820`.
-The extracted encoder, decoder, vocabulary, metadata, and config files each have independent size and SHA-256 pins in [WhisperBundleSpec.kt](../experiments/recorder-engine-android/src/main/java/com/onetake/engine/android/whisper/install/WhisperBundleSpec.kt).
+The extracted encoder, decoder, vocabulary, metadata, and config files each have independent size and SHA-256 pins in [WhisperBundleSpec.kt](../engine-android/src/main/java/com/onetake/engine/android/whisper/install/WhisperBundleSpec.kt).
 The corresponding three-artifact verifier manifest is [whisper-tiny-v0610-sm8850-manifest.json](../tools/model-bundles/whisper-tiny-v0610-sm8850-manifest.json).
 
 The Qualcomm model card says that the original Whisper implementation is Apache-2.0 and links the versioned Transformers license.

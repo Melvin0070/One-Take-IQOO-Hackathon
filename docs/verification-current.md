@@ -1,7 +1,4 @@
-# Historical recorder prototype verification
-
-> Historical prototype record: the implementation and measurements described here are archived under `experiments/` and excluded from the current nine-module build.
-> Run the historical build commands from the [tested prototype checkout](../experiments/AGENTS.md), not from the current repository root.
+# Current verification
 
 ## iQOO 15 inference framework, 2026-09-12
 

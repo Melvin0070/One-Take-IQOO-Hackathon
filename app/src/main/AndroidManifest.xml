@@ -2,51 +2,42 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- R17: this list is the demo build's promise to the infosec juror.
-         It is checked against config/allowed-permissions.txt by
-         `./gradlew guardPermissions`, which runs on the MERGED manifest so a
-         library cannot add one quietly. A Pune team in this series shipped an
-         "offline" app whose library had added INTERNET. Do not add a line here
-         without adding it to the allowlist and saying why in the commit. -->
+    <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROCESSING" />
-
-    <!-- Media3 declares ACCESS_NETWORK_STATE (ExoPlayer's bandwidth meter reads it for
-         adaptive streaming). We play local files only, and P1 says the single-phone path
-         makes no network calls — a juror who opens the merged manifest must not find a
-         network permission in an app we call offline. Removed here, caught by
-         `./gradlew guardPermissions` if it ever comes back.
-
-         If Media3 turns out to need it at runtime, the honest fix is to put it back AND
-         say so on stage. Do not silently allowlist it. -->
-    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" tools:node="remove" />
-
-    <!-- Also Media3's, for ExoPlayer's setWakeMode. We keep the screen on with
-         FLAG_KEEP_SCREEN_ON instead, so nothing here needs a wake lock. -->
-    <uses-permission android:name="android.permission.WAKE_LOCK" tools:node="remove" />
-
-    <uses-feature android:name="android.hardware.camera.any" android:required="true" />
-    <uses-feature android:name="android.hardware.microphone" android:required="true" />
+    <uses-feature
+        android:name="android.hardware.camera.any"
+        android:required="false" />
 
     <application
-        android:allowBackup="false"
+        android:allowBackup="true"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@android:style/Theme.Material.NoActionBar">
+        android:theme="@style/Theme.OneTake">
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.videos"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/video_share_paths" />
+        </provider>
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:screenOrientation="portrait"
-            android:configChanges="orientation|screenSize|keyboardHidden">
+            android:theme="@style/Theme.OneTake"
+            android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
+
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
     </application>
+
 </manifest>

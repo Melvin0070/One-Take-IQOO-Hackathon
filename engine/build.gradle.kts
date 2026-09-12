@@ -1,23 +1,22 @@
 plugins {
-    alias(libs.plugins.kotlin.jvm)
-    alias(libs.plugins.kotlin.serialization)
+    kotlin("jvm")
 }
-
-// HARD RULE: this module must never compile against android.*.
-// The kotlin("jvm") plugin is the enforcement — the Android SDK is not on its
-// classpath, so an `import android.` is a compile error, not a review catch.
 
 java {
-    sourceCompatibility = JavaVersion.VERSION_17
-    targetCompatibility = JavaVersion.VERSION_17
+    sourceCompatibility = JavaVersion.VERSION_11
+    targetCompatibility = JavaVersion.VERSION_11
 }
-kotlin { compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) } }
+
+kotlin {
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11)
+    }
+}
 
 dependencies {
-    api(libs.kotlinx.coroutines.core)
-    implementation(libs.kotlinx.serialization.json)
-    testImplementation(libs.junit)
-    testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation("junit:junit:4.13.2")
 }
 
-tasks.test { useJUnit() }
+tasks.test {
+    useJUnit()
+}

@@ -1,8 +1,5 @@
 # iQOO 15 inference implementation plan
 
-> Historical prototype record: the implementation and measurements described here are archived under `experiments/` and excluded from the current nine-module build.
-> Run the historical build commands from the [tested prototype checkout](../../experiments/AGENTS.md), not from the current repository root.
-
 **Goal:** Put production model execution behind an engine-owned NPU preference policy and implement the validated Qualcomm path for the owner’s iQOO 15.
 **Spec:** [Issue 1](https://github.com/Melvin0070/One-Take-IQOO-Hackathon/issues/1).
 **Architecture:** Pure Kotlin engine contracts own selection, lifecycle, and execution reports.

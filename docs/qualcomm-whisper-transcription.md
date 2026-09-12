@@ -1,8 +1,5 @@
 # Qualcomm Whisper transcription integration
 
-> Historical prototype record: the implementation and measurements described here are archived under `experiments/` and excluded from the current nine-module build.
-> Run the historical build commands from the [tested prototype checkout](../experiments/AGENTS.md), not from the current repository root.
-
 This branch connects the engine's audio features and token decoder to the pinned Qualcomm Whisper Tiny graph pair on the owner's iQOO 15.
 It depends on the separate audio-feature, token-decoder and model-installation changes.
 Production caption registration remains separate from this strict transcription API.

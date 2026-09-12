@@ -1,115 +1,134 @@
 # One-Take
 
-**A script supervisor in the viewfinder.** While you film, it knows which lines of your
-script still lack a clean take, asks for exactly those between lines, tells you when it is
-safe to wrap, and plays the finished, captioned cut the moment you stop. On the phone,
-offline.
+A Kotlin Android app using Jetpack Compose and CameraX.
+It records video with audio, lets you review it, and keeps recordings in a local library.
 
-Post-hoc tools already cut, caption and clean up. None of them can fix a take that was
-never recorded — you find out at the desk that line 3 has no clean read, after the light,
-the setup and the energy are gone. One-Take moves that check to the moment of capture.
+## Device monitoring tool
 
-Built for the iQOO City Battles, Chennai, Sep 12–13 2026. Android, Kotlin, Compose.
+The standalone [Device Monitor](tools/device-monitor/README.md) collects Android device measurements over ADB, exports NDJSON for AI analysis, and hosts the actual Perfetto UI locally for native traces and sampled sessions, with JSON session comparisons.
+It runs on the development computer and does not require changes to the recorder app.
+Metric availability depends on the connected phone; GPU and NPU utilization require future vendor integrations.
 
----
+## Project structure
 
-## Building
+- `engine/` is a pure Kotlin JVM module for session state, sample-based time, reversible edits, deterministic event replay, and inference backend policy.
+- `engine-android/` contains Android runtime integration, including the iQOO 15 QNN/HTP capability probe.
+- `app/.../engine/` adapts existing caption/cut metadata to the engine and persists checksummed event journals.
+- `MainActivity.kt` starts the Compose interface.
+- `RecorderContent.kt` coordinates navigation and screen state.
+- `CameraRecorder.kt` owns CameraX and the authoritative recording state.
+- `CaptureState.kt` defines idle, starting, recording, and finalizing states.
+- `VideoStore.kt` manages recordings and interrupted-file recovery.
+- `PermissionGate.kt` requests camera and microphone access.
+- `CameraScreen.kt`, `ReviewScreen.kt`, and `LibraryScreen.kt` display the three screens.
+- `RecorderUtils.kt` formats the recording timer.
+- `res/values/strings.xml` contains user-facing text.
 
-There is no system JDK on the build machines — use Android Studio's bundled one:
+## Camera controls
 
-```bash
-export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
-export ANDROID_HOME="$HOME/Library/Android/sdk"
+The camera uses a large preview with black framing and an outlined record button.
+Tap the top-left menu or quality badge to choose recording quality and toggle the composition grid or sensor level.
+These settings persist between launches.
+Available resolutions come from the selected camera, and the badge shows the active resolution.
+Tap the zoom ratio to reveal a slider, or pinch the preview to zoom.
+Use the flip control to switch cameras and the top-right thumbnail to open saved videos.
+The camera screen keeps the display awake while it is visible.
 
-./gradlew :engine:test          # the brain, pure JVM, ~2 seconds
-./gradlew verify                # tests + assembleDebug + guards. The gate.
-./gradlew :app:assembleDebug
+## Recording behavior
 
+Recordings are saved in the app's private `files/videos` directory.
+The Saved videos screen displays a thumbnail grid with recording dates and file sizes.
+Tap a thumbnail to play a video, or use its delete control to request deletion.
+The gallery remains available without camera or microphone permission.
+Back from review keeps the recording.
+Retake and library deletion require confirmation.
+Uninstalling the app removes its recordings.
+
+The app stops recording when it leaves the foreground.
+Finalization continues after the screen or Activity is destroyed.
+A durable engine session starts before CameraX, records live observations and lifecycle events, and keeps its UUID through review and recovery.
+Provisional recognition and vision timestamps remain separate from finalized media time, so they cannot accidentally drive edits.
+The library checks pending recordings from interrupted sessions, retaining valid videos and removing invalid partial outputs.
+Interrupted files whose format cannot be determined stay visible in the library so you can try playback or delete them.
+An active recording is protected from recovery by a locked pending marker.
+A process killed before a valid video has been written cannot always yield a recoverable recording.
+
+## Capture-time pause cuts
+
+Long interior non-speech pauses are marked while recording, including when captions are disabled.
+A bundled 885 KB Silero voice-activity model detects speech and pauses without a caption-model download or network connection.
+It uses the existing native CPU runtime; caption recognition is unchanged.
+If the neural detector is unavailable, the app falls back to WebRTC VAD, then conservative near-silence rules.
+The camera shows a potential-pause count after a candidate has been saved to the engine.
+After Stop, the app aligns microphone timing and confirms candidates against the saved video audio before creating reversible cuts.
+Unreliable alignment falls back to saved-audio analysis.
+No Whisper model is needed for pause detection.
+
+Open Edits in review to undo or reapply individual cuts, or restore all of them.
+Playback and Save edited copy use the same edit plan, and the original stays untouched.
+The detector can still miss pauses around background voices, music, or speech-like noise.
+It does not identify the intended speaker, and review remains necessary.
+See the [pause decision contract](docs/live-pause-decisions.md) for timing and safety rules.
+
+## Downloadable offline captions
+
+Open the camera menu, then Feature marketplace, and download Offline Captions.
+The first download needs internet and approximately 78 MB of storage for the multilingual Whisper tiny model.
+The app verifies its pinned SHA-256 checksum before enabling it.
+The model comes from the public `ggerganov/whisper.cpp` repository on Hugging Face.
+Only model data is downloaded; the inference runtime is bundled in the APK.
+
+With Auto-caption new recordings enabled, the caption engine starts alongside recording.
+It keeps one model session open and processes overlapping audio windows, displaying the latest committed caption on the camera screen.
+After Stop, it finishes the remaining words, opens captioned playback, and automatically renders a separate captioned MP4.
+You can correct text with Edit captions and choose Save captioned copy again after making changes.
+The original recording is preserved.
+
+CameraX retains its original audio/video pipeline.
+A separate live microphone feed is checked against the actual recorded audio before its captions are accepted.
+If live capture, inference, or alignment fails, the app generates captions from the saved recording instead.
+That fallback takes longer.
+Caption processing and export survive Activity recreation after the recording has finalized.
+Destroying the Activity during an unfinished recording stops live inference; the original remains recoverable through the normal recording flow.
+Existing recordings also have a Generate captions action.
+Removing the model frees its storage without deleting videos or saved caption text.
+
+Whisper, Silero, and face tracking currently execute on CPU.
+The [iQOO 15 inference framework](docs/iqoo15-inference.md) prefers validated NPU adapters, reports CPU fallback explicitly, and provides strict NPU validation.
+Compatible production NPU artifacts are not yet integrated; successful QNN runtime initialization alone does not accelerate these models.
+Processing time and transcription accuracy depend on the phone, language, and recording quality.
+Keep the app open while processing; jobs survive screen navigation but do not resume after process termination.
+Videos longer than 120 seconds are currently rejected by the caption decoder.
+The current milestone targets 30-second recordings.
+
+## Build and local tests
+
+See [current verification](docs/verification-current.md) for the latest build results and device-testing limits.
+
+Run `./gradlew :engine:test` to verify the engine without Android or a connected phone.
+The [engine foundation contract](docs/engine-foundation.md) describes ordering, persistence, migration, and current limits.
+Script workflows and performance optimization are intentionally deferred.
+
+Use Android Studio's configured Gradle JDK, or set `JAVA_HOME` to a suitable installed JDK in your terminal.
+
+```sh
+./gradlew testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest
+```
+
+## Device tests without uninstalling the app
+
+Connect an unlocked test phone with USB debugging enabled.
+The flow tests record short videos using its camera and microphone and delete only their test recordings.
+Use a dedicated test device when possible.
+
+```sh
 adb install -r app/build/outputs/apk/debug/app-debug.apk
+adb install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+adb shell am instrument --user 0 -w -r \
+  -e class com.example.one_take.CameraLayoutTest,com.example.one_take.CameraRecorderStateTest,com.example.one_take.RecorderControlsTest,com.example.one_take.RecorderFlowTest \
+  com.example.one_take.test/androidx.test.runner.AndroidJUnitRunner
 ```
 
-**Never `adb uninstall`.** It wipes imported models and recorded sessions from the device.
-`-r` updates in place.
-
-## Modules
-
-```
-:engine          PURE JVM. Interfaces, aligner, ledger, coverage fold, edit-list rules.
-:engine-fixtures Fakes, corpus loader, golden ledgers.
-:eval            corpus -> eval card, one command.
-:asr             sherpa-onnx CPU: VAD, streaming transducer, keyword spotting.
-:npu             LiteRT + Qualcomm accelerator. The only module that links QNN.
-:capture         CameraX, AudioRecord, foreground service, the timebase anchor.
-:media           Media3 playback from the edit list, Transformer export, captions.
-:link            Multicam pairing and encrypted transfer. Tier 2.
-:app             Compose UI, every screen, debug panel.
-```
-
-`:engine` has no Android dependency and cannot compile against one — it uses the Kotlin JVM
-plugin, so `import android.` is a compile error. That is what makes its test suite two
-seconds instead of two minutes on a device.
-
-## The debug keystore is committed on purpose
-
-`config/debug.keystore` is in the repository, with its password in
-`app/build.gradle.kts`. This is deliberate and it is not a secret:
-
-- It signs **debug builds only.**
-- It exists so three laptops and CI can all `adb install -r` over the same installation on a
-  test phone. Without a shared key, every machine's build is a different signature and the
-  install fails unless you uninstall first — and uninstalling wipes the models and recorded
-  sessions on that phone.
-- **No release artifact is ever signed with it.** Nothing signed by this key is distributed.
-
-Model files and their hashes stay out of git. They arrive on the device by file transfer and
-are SHA-256 verified at import against a checked-in manifest.
-
-## Build guards
-
-Three checks run in `./gradlew guards` and they exist because a hackathon with many agents
-adding dependencies is exactly how an "offline" app quietly acquires `INTERNET`:
-
-| Task | What it enforces |
-|---|---|
-| `guardPermissions` | The **merged** manifest's permission list equals `config/allowed-permissions.txt`. A library that adds a permission fails the build |
-| `guardDependencies` | Every resolved dependency is in `config/allowed-dependencies.txt`. No analytics, ads or crash-reporting SDKs, and no second ONNX or QNN runtime |
-| `generateAttribution` | Regenerates `ATTRIBUTION.md` from the real resolved dependency graph |
-
-## Privacy
-
-The single-phone path makes no network calls, and the demo build has no `INTERNET`
-permission — checkable in the merged manifest. Raw video, audio, transcripts and ledgers
-stay in app-private storage until an explicit export. Delete project removes raw files, the
-ledger, transcripts and app-made exports. No third-party analytics, ads or crash reporting.
-Release builds have no debug panel.
-
-Multicam would need `INTERNET` (Android requires it even for local sockets). If it ships, it
-ships as a separate build flavour and the claim changes with it.
-
-## Documentation
-
-| For | Read |
-|---|---|
-| **AI agents and contributors** | [`AGENTS.md`](AGENTS.md), then [`docs/agents/`](docs/agents/README.md) |
-| Why the product is shaped this way | [`One-Take-Design-v3.md`](One-Take-Design-v3.md) |
-| Module boundaries, interfaces, verified library research | [`One-Take-Contract.md`](One-Take-Contract.md) |
-| Ordering, gates, fallbacks | [`One-Take-Playbook.md`](One-Take-Playbook.md) |
-
-## Also in this repository
-
-- **[`tools/device-monitor/`](tools/device-monitor/README.md)** — a standalone ADB profiler
-  that collects device measurements, exports NDJSON, and hosts the real Perfetto UI locally
-  for native traces and sampled sessions. Runs on the development machine; needs no app
-  changes.
-- **`experiments/`** — the pre-event prototype (a CameraX recorder with on-device Whisper
-  captions and pause cutting). **Not in the Gradle build.** Kept as a mining reference for
-  working CameraX, VAD, JNI and Media3 patterns. See
-  [`experiments/AGENTS.md`](experiments/AGENTS.md).
-
-## Status
-
-The scaffold exists; the product does not. `:engine` carries the frozen interfaces and
-`TODO` at every behavioural boundary; the other modules are shells. Nothing has run on the
-target device yet, and several pinned choices are researched but unproven on this hardware —
-the bring-up harness exists to prove or kill each of them in the first thirty minutes on a
-loaner.
+Do not use `connectedDebugAndroidTest` on an installation containing recordings you need to keep.
+In this setup, Gradle's connected-test runner uninstalls the app during cleanup and removes private storage.
+The direct instrumentation commands above preserve the app installation.

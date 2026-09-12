@@ -20,16 +20,4 @@ tools/device-monitor/.cache/
 tools/device-monitor/runs/
 .env
 
-# Build outputs for the archived Android runtime module
-/experiments/recorder-engine-android/build/
-
-# Build outputs for the nine-module graph
-/*/build/
-/build/
-# Vendored binaries are committed by exception; models never are.
-libs/*.aar
-!libs/README.md
-*.tflite
-*.onnx
-*.bin
-corpus/
+/engine-android/build/

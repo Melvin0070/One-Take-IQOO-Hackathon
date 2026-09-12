@@ -1,8 +1,5 @@
 # Whisper caption pipeline
 
-> Historical prototype record: the implementation and measurements described here are archived under `experiments/` and excluded from the current nine-module build.
-> Run the historical build commands from the [tested prototype checkout](../../experiments/AGENTS.md), not from the current repository root.
-
 The iQOO 15 already executes the pinned Qualcomm Whisper Tiny encoder and decoder on HTP.
 The next change connects actual audio, token generation and model timestamps before production activation.
 
