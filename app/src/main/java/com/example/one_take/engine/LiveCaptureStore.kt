@@ -6,6 +6,9 @@ import com.onetake.engine.EditingEngine
 import com.onetake.engine.EngineState
 import com.onetake.engine.Event
 import com.onetake.engine.EventSink
+import com.onetake.engine.RecordingSessionReader
+import com.onetake.engine.RecordingSessionSnapshot
+import com.onetake.engine.SessionMode
 import java.io.File
 import java.io.IOException
 import java.util.UUID
@@ -23,7 +26,12 @@ internal class LiveCaptureStore(
     private val directory: File,
 ) {
     /** Creates a session and durably records its source name before returning the id. */
-    fun begin(sourceName: String): String = withDirectoryLock {
+    fun begin(
+        sourceName: String,
+        mode: SessionMode = SessionMode.ASSISTED,
+        script: String? = null,
+        startedAtEpochMs: Long? = null,
+    ): String = withDirectoryLock {
         validateSourceName(sourceName)
         ensureDirectory()
 
@@ -40,7 +48,7 @@ internal class LiveCaptureStore(
                 val engine = EditingEngine(session, durableEventSink(journal))
                 engine.submit(
                     sample = 0L,
-                    change = Change.CaptureRequested(sourceName),
+                    change = Change.CaptureRequested(sourceName, mode, script, startedAtEpochMs),
                     clock = ClockDomain.CAPTURE_ESTIMATE,
                 )
                 return@withDirectoryLock session
@@ -61,6 +69,11 @@ internal class LiveCaptureStore(
     /** Returns the complete durable event history for a known session. */
     fun events(session: String): List<Event> = withDirectoryLock {
         readHistory(session)
+    }
+
+    /** Reconstructs the recording session (header and signals) from its journal. */
+    fun session(session: String): RecordingSessionSnapshot = withDirectoryLock {
+        RecordingSessionReader.read(readHistory(session))
     }
 
     /** Replays a known session without repairing or modifying its ledger. */

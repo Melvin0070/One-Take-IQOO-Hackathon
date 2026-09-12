@@ -17,9 +17,7 @@ internal object EngineEventCodec {
                     array.put(JSONObject().put("id", it.chunk.id).put("text", it.chunk.text)
                         .put("state", it.state.name).put("coverage", it.coverage).put("attempts", it.attempts))
                 } })
-            is Change.TakeAttemptObserved -> change.put("type", "take-attempt")
-                .put("chunk", input.attempt.chunkId).put("attempt", input.attempt.attempt)
-                .put("segment", input.attempt.segmentId)
+            is Change.SignalObserved -> change.put("type", "signal").put("signal", encodeSignal(input.signal))
             is Change.SourceFinalized -> change.put("type", "source-finalized")
                 .put("source", input.sourceId).put("duration", input.durationSamples)
                 .put("anchorSample", input.anchor.sampleIndex).put("anchorVideoUs", input.anchor.videoTimeUs)
@@ -41,6 +39,7 @@ internal object EngineEventCodec {
             Change.Cancelled -> change.put("type", "cancelled")
             Change.MediaMissing -> change.put("type", "media-missing")
             is Change.CaptureRequested -> change.put("type", "capture-requested").put("name", input.sourceName)
+                .put("mode", input.mode.name).putOpt("script", input.script).putOpt("startedAt", input.startedAtEpochMs)
             Change.CaptureStarted -> change.put("type", "capture-started")
             is Change.StopRequested -> change.put("type", "stop-requested").put("reason", input.reason)
             is Change.CaptureFailed -> change.put("type", "capture-failed").put("reason", input.reason)
@@ -65,7 +64,10 @@ internal object EngineEventCodec {
                 ChunkCoverage(ScriptChunk(it.getString("id"), it.getString("text")),
                     ScriptChunkState.valueOf(it.getString("state")), it.getDouble("coverage"), it.getInt("attempts"))
             }, data.getInt("current"), ScriptProgressReason.valueOf(data.getString("reason"))).frozen())
-            "take-attempt" -> Change.TakeAttemptObserved(TakeAttempt(data.getString("chunk"), data.getInt("attempt"), data.getString("segment")))
+            "signal" -> Change.SignalObserved(decodeSignal(data.getJSONObject("signal")))
+            // Written by the script matcher before takes became session signals; span is the segment end.
+            "take-attempt" -> Change.SignalObserved(TakeAttempt("${data.getString("chunk")}#${data.getInt("attempt")}",
+                data.getString("chunk"), data.getInt("attempt"), value.getLong("sample"), value.getLong("sample")))
             "source-finalized" -> Change.SourceFinalized(data.getString("source"), data.getLong("duration"),
                 VideoAnchor(data.getLong("anchorSample"), data.getLong("anchorVideoUs")))
             "captions-replaced" -> Change.CaptionsReplaced(data.getJSONArray("captions").objects().map {
@@ -84,7 +86,10 @@ internal object EngineEventCodec {
             "cuts-restored" -> Change.CutsRestored
             "cancelled" -> Change.Cancelled
             "media-missing" -> Change.MediaMissing
-            "capture-requested" -> Change.CaptureRequested(data.getString("name"))
+            "capture-requested" -> Change.CaptureRequested(data.getString("name"),
+                SessionMode.valueOf(data.optString("mode", SessionMode.ASSISTED.name)),
+                if (data.isNull("script")) null else data.getString("script"),
+                if (data.isNull("startedAt")) null else data.getLong("startedAt"))
             "capture-started" -> Change.CaptureStarted
             "stop-requested" -> Change.StopRequested(data.getString("reason"))
             "capture-failed" -> Change.CaptureFailed(data.getString("reason"))
@@ -98,6 +103,38 @@ internal object EngineEventCodec {
         }
         return Event(value.getLong("sequence"), value.getString("session"), value.getLong("sample"), change,
             ClockDomain.valueOf(value.optString("clock", ClockDomain.MEDIA.name)))
+    }
+
+    private fun encodeSignal(signal: SessionSignal): JSONObject {
+        val value = JSONObject().put("id", signal.id).put("start", signal.startSample).put("end", signal.endSample)
+        return when (signal) {
+            is TranscriptSegment -> value.put("kind", "transcript-segment").put("text", signal.text)
+                .put("words", JSONArray().also { words -> signal.words.forEach {
+                    words.put(JSONObject().put("start", it.startSample).put("end", it.endSample)
+                        .put("text", it.text).put("confidence", it.confidence))
+                } })
+            is Silence -> value.put("kind", "silence").put("source", signal.source.name)
+            is Filler -> value.put("kind", "filler").put("text", signal.text)
+            is GazeSample -> value.put("kind", "gaze").put("face", signal.faceInFrame).putOpt("onCamera", signal.onCamera)
+            is TakeAttempt -> value.put("kind", "take-attempt").put("group", signal.groupId).put("attempt", signal.attemptIndex)
+        }
+    }
+
+    private fun decodeSignal(data: JSONObject): SessionSignal {
+        val id = data.getString("id")
+        val start = data.getLong("start")
+        val end = data.getLong("end")
+        return when (data.getString("kind")) {
+            "transcript-segment" -> TranscriptSegment(id, start, end, data.getString("text"),
+                data.getJSONArray("words").objects().map {
+                    TranscriptWord(it.getLong("start"), it.getLong("end"), it.getString("text"), it.getDouble("confidence").toFloat())
+                })
+            "silence" -> Silence(id, start, end, VoiceActivitySource.valueOf(data.getString("source")))
+            "filler" -> Filler(id, start, end, data.getString("text"))
+            "gaze" -> GazeSample(id, start, data.getBoolean("face"), if (data.isNull("onCamera")) null else data.getBoolean("onCamera"))
+            "take-attempt" -> TakeAttempt(id, data.getString("group"), data.getInt("attempt"), start, end)
+            else -> error("Unsupported session signal")
+        }
     }
 
     private fun JSONArray.objects() = (0 until length()).map { getJSONObject(it) }

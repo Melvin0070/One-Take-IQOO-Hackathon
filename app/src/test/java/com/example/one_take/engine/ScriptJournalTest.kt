@@ -27,9 +27,9 @@ class ScriptJournalTest {
         store.append(id, 48000, Change.SourceFinalized("fingerprint", 48000, VideoAnchor(0, 0)), ClockDomain.MEDIA)
         val history = store.events(id)
         assertEquals(matcher.progress, store.snapshot(id).scriptProgress)
-        assertEquals(1, store.snapshot(id).takeAttempts.size)
+        assertEquals(1, store.session(id).signals<TakeAttempt>().size)
         assertEquals(store.snapshot(id), EditingEngine(id, history = history).snapshot())
-        assertTrue(history.filter { it.change is Change.TakeAttemptObserved }.all { it.clock == ClockDomain.RECOGNIZER })
+        assertTrue(history.filter { it.change is Change.SignalObserved }.all { it.clock == ClockDomain.RECOGNIZER })
         assertTrue(history.filter { (it.change as? Change.ScriptProgressObserved)?.progress?.reason == ScriptProgressReason.MANUAL_NEXT }
             .all { it.clock == ClockDomain.CAPTURE_ESTIMATE })
     }

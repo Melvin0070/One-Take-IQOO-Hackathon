@@ -17,7 +17,8 @@ internal class ScriptCaptureController(
     fun consume(segments: List<CaptionSegment>) {
         segments.forEach { segment -> matcher.consume(ScriptTranscript(
             "${segment.startMs}:${segment.endMs}", segment.text,
-            Timeline().samplesFromMillis(segment.endMs.coerceAtLeast(0)))) }
+            Timeline().samplesFromMillis(segment.endMs.coerceAtLeast(0)),
+            Timeline().samplesFromMillis(segment.startMs.coerceIn(0, segment.endMs.coerceAtLeast(0))))) }
         progress = matcher.progress
     }
     fun next(elapsedMs: Long) { matcher.next(Timeline().samplesFromMillis(elapsedMs.coerceAtLeast(0))); progress = matcher.progress }

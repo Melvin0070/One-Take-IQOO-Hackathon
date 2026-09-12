@@ -16,6 +16,6 @@ class ScriptCaptureControllerTest {
         assertEquals(1, controller.progress.chunks.single().attempts)
         controller.consume(listOf(first, first.copy(startMs = 1000, endMs = 2000)))
         assertEquals(2, controller.progress.chunks.single().attempts)
-        assertEquals(1, changes.filterIsInstance<Change.TakeAttemptObserved>().size)
+        assertEquals(1, changes.filterIsInstance<Change.SignalObserved>().size)
     }
 }

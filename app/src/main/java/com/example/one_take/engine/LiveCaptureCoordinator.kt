@@ -48,8 +48,8 @@ internal class LiveCaptureCoordinator private constructor(context: Context) {
     }
 
     /** Returns only after the requested event is durable, before CameraX may start. */
-    suspend fun begin(source: File): String = withContext(dispatcher) {
-        val session = store.begin(source.name)
+    suspend fun begin(source: File, mode: SessionMode = SessionMode.ASSISTED, script: String? = null): String = withContext(dispatcher) {
+        val session = store.begin(source.name, mode, script, System.currentTimeMillis())
         active[session] = ActiveClock(SystemClock.elapsedRealtime())
         withContext(Dispatchers.Main) { pauseCounts = emptyMap() }
         session
@@ -110,12 +110,29 @@ internal class LiveCaptureCoordinator private constructor(context: Context) {
     }
 
     fun scriptEvent(session: String, sample: Long, change: Change, clock: ClockDomain) {
-        require(change is Change.ScriptProgressObserved || change is Change.TakeAttemptObserved)
+        require(change is Change.ScriptProgressObserved || change is Change.SignalObserved)
         scope.launch { guarded {
             if (session !in active) return@guarded
             if (store.snapshot(session).phase in runningPhases) store.append(session, sample, change, clock)
         } }
     }
+
+    /**
+     * Records a live signal in its own clock, or a media-confirmed one once the source is READY.
+     * Redelivery of the same signal id is ignored rather than surfaced as a history failure.
+     */
+    fun signal(session: String, signal: SessionSignal, clock: ClockDomain = signal.liveClock) {
+        scope.launch { guarded {
+            val state = store.snapshot(session)
+            val accepting = if (clock == ClockDomain.MEDIA) state.phase == SessionPhase.READY
+                else session in active && state.captureStarted && state.phase in runningPhases
+            if (accepting && signal.key(clock) !in state.signalKeys) {
+                store.append(session, signal.endSample, Change.SignalObserved(signal), clock)
+            }
+        } }
+    }
+
+    suspend fun session(session: String): RecordingSessionSnapshot = withContext(dispatcher) { store.session(session) }
 
     /** Unreconciled ASR stays in its own clock domain and never changes final captions. */
     fun transcript(session: String, segments: List<CaptionSegment>) {

@@ -71,13 +71,14 @@ data class EngineState(
     val failureReason: String? = null,
     val pauseCandidates: List<PauseCandidate> = emptyList(),
     val scriptProgress: ScriptProgress? = null,
-    val takeAttempts: List<TakeAttempt> = emptyList(),
+    /** Keys of accepted [SessionSignal]s; the signals themselves are read with [RecordingSessionReader]. */
+    val signalKeys: Set<String> = emptySet(),
 )
 
 /** A state transition submitted to the engine. */
 sealed interface Change {
     data class ScriptProgressObserved(val progress: ScriptProgress) : Change
-    data class TakeAttemptObserved(val attempt: TakeAttempt) : Change
+    data class SignalObserved(val signal: SessionSignal) : Change
 
     data class SourceFinalized(
         val sourceId: String,
@@ -103,8 +104,12 @@ sealed interface Change {
 
     data object MediaMissing : Change
 
+    /** First event of every capture; doubles as the [SessionHeader]. */
     data class CaptureRequested(
         val sourceName: String,
+        val mode: SessionMode = SessionMode.ASSISTED,
+        val script: String? = null,
+        val startedAtEpochMs: Long? = null,
     ) : Change
 
     data object CaptureStarted : Change
@@ -190,7 +195,7 @@ class EditingEngine(
         validateClock(normalizedChange, clock)
         val current = state
         validateSample(current, sample, clock)
-        val resultingState = reduce(current, sample, normalizedChange)
+        val resultingState = reduce(current, sample, normalizedChange, clock)
         val sequence = Math.addExact(nextSequence, 1L)
         val event = Event(sequence, sessionId, sample, normalizedChange, clock)
 
@@ -211,10 +216,16 @@ class EditingEngine(
     }
 
     private fun validateClock(change: Change, clock: ClockDomain) {
+        if (change is Change.SignalObserved) {
+            require(clock == change.signal.liveClock || clock == ClockDomain.MEDIA) {
+                "${change.signal::class.simpleName} requires ${change.signal.liveClock} or MEDIA clock"
+            }
+            return
+        }
         val required = when (change) {
             is Change.ScriptProgressObserved -> if (change.progress.reason == ScriptProgressReason.TRANSCRIPT)
                 ClockDomain.RECOGNIZER else ClockDomain.CAPTURE_ESTIMATE
-            is Change.TakeAttemptObserved -> ClockDomain.RECOGNIZER
+            is Change.SignalObserved -> error("Handled above")
             is Change.CaptureRequested,
             Change.CaptureStarted,
             is Change.StopRequested,
@@ -241,15 +252,25 @@ class EditingEngine(
         }
     }
 
-    private fun reduce(current: EngineState, sample: Long, change: Change): EngineState {
+    private fun reduce(current: EngineState, sample: Long, change: Change, clock: ClockDomain): EngineState {
         return when (change) {
             is Change.ScriptProgressObserved -> {
                 require(current.captureRequested && current.phase in setOf(SessionPhase.RECORDING, SessionPhase.FINALIZING))
                 current.copy(scriptProgress = change.progress.frozen())
             }
-            is Change.TakeAttemptObserved -> {
-                requireActiveCapture(current, "Take attempt")
-                current.copy(takeAttempts = immutableCopy(current.takeAttempts + change.attempt))
+            is Change.SignalObserved -> {
+                val signal = change.signal
+                if (clock == ClockDomain.MEDIA) {
+                    requireMediaReady(current, "Media signal")
+                    require(signal.endSample <= current.durationSamples) {
+                        "Media signal must be within the finalized duration"
+                    }
+                } else {
+                    requireActiveCapture(current, "Live signal")
+                }
+                val key = signal.key(clock)
+                require(key !in current.signalKeys) { "Duplicate signal: $key" }
+                current.copy(signalKeys = java.util.Collections.unmodifiableSet(current.signalKeys + key))
             }
             is Change.SourceFinalized -> {
                 require(
@@ -286,7 +307,7 @@ class EditingEngine(
                     failureReason = current.failureReason,
                     pauseCandidates = current.pauseCandidates,
                     scriptProgress = current.scriptProgress,
-                    takeAttempts = current.takeAttempts,
+                    signalKeys = current.signalKeys,
                 )
             }
 
@@ -326,6 +347,12 @@ class EditingEngine(
                 }
                 require(change.sourceName.isNotBlank()) {
                     "Capture source name must not be blank"
+                }
+                require(change.script == null || change.script.isNotBlank()) {
+                    "Session script must be null or non-blank"
+                }
+                require(change.mode == SessionMode.SCRIPT || change.script == null) {
+                    "Only Script Mode sessions carry a script"
                 }
                 current.copy(
                     captureRequested = true,
@@ -471,12 +498,13 @@ class EditingEngine(
         edits = value.edits?.let { EditPlan(it.durationSamples, it.cuts) },
         pauseCandidates = immutableCopy(value.pauseCandidates),
         scriptProgress = value.scriptProgress?.frozen(),
-        takeAttempts = immutableCopy(value.takeAttempts),
     )
 
     private fun copyChange(change: Change): Change = when (change) {
         is Change.ScriptProgressObserved -> Change.ScriptProgressObserved(change.progress.frozen())
-        is Change.TakeAttemptObserved -> change.copy()
+        is Change.SignalObserved -> Change.SignalObserved(
+            (change.signal as? TranscriptSegment)?.let { it.copy(words = immutableCopy(it.words)) } ?: change.signal,
+        )
         is Change.SourceFinalized -> change.copy()
         is Change.CaptionsReplaced -> Change.CaptionsReplaced(
             immutableCopy(change.captions.map(::copyCaption)),
@@ -511,7 +539,7 @@ class EditingEngine(
             val normalizedChange = copyChange(event.change)
             validateClock(normalizedChange, event.clock)
             validateSample(replayed, event.sample, event.clock)
-            replayed = reduce(replayed, event.sample, normalizedChange)
+            replayed = reduce(replayed, event.sample, normalizedChange, event.clock)
                 .copy(revision = event.sequence)
             expectedSequence = Math.addExact(expectedSequence, 1L)
         }
