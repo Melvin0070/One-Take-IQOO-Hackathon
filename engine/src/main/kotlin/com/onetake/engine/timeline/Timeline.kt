@@ -43,6 +43,8 @@ data class RemovalCandidate(
  * Clip intervals use a half-open range, so a clip contains samples from
  * [Clip.sourceStart] through [Clip.sourceEnd] exclusive.  The list order is
  * the current editing order and may differ from source order after reorder.
+ * Distinct clips may reference overlapping source intervals to replay footage.
+ * Export concatenates kept clips; it does not take the union of their ranges.
  */
 class Timeline(clips: List<Clip>) {
     /** An immutable snapshot of the clips in editing order. */

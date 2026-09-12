@@ -8,6 +8,15 @@ import org.junit.Test
 
 /** Exercises the shared analysis -> editor -> persisted export contract. */
 class TimelineWorkflowTest {
+    @Test fun explicitRepeatedFootageRemainsAnOrderedConcatenationAfterPersistence() {
+        val timeline = Timeline(listOf(Clip("first", 0, 10), Clip("replay", 5, 15)))
+        val saved = TimelineCodec.decode(TimelineCodec.encode(timeline))
+        assertEquals(timeline, saved)
+        assertEquals(listOf(0L to 10L, 5L to 15L),
+            saved.keptClips().map { it.sourceStart to it.sourceEnd })
+        assertEquals(20L, saved.exportedDurationSamples())
+    }
+
     @Test fun removingMiddleTwoSecondsExportsFourSecondsWithoutChangingSourcePlan() {
         val clock = SampleClock()
         val plan = EditPlan(clock.samplesFromMillis(6_000), listOf(
