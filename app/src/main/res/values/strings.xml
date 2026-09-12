@@ -69,4 +69,13 @@
     <string name="script_mismatched">Partial match</string>
     <string name="script_repeated">Repeated</string>
     <string name="script_manual_only">Manual navigation available. Enable downloaded Offline Captions for auto-advance.</string>
+
+    <!-- Visual suggestions (issue #60 demo scope) -->
+    <string name="visual_suggestions">Visual Suggestions</string>
+    <string name="visual_suggestions_title">Visual Suggestions</string>
+    <string name="visual_suggestions_preview_unavailable">The camera preview is not ready yet.</string>
+    <string name="visual_suggestions_capture_failed">Could not capture the camera preview.</string>
+    <string name="visual_suggestions_analysis_failed">Could not analyze this frame. Please try again.</string>
+    <string name="visual_suggestions_good">Looks good</string>
+    <string name="visual_suggestions_dismiss">Dismiss</string>
 </resources>
