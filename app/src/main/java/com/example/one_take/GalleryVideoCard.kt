@@ -49,12 +49,14 @@ internal fun GalleryVideoCard(
     val file = project.source
     val thumbnail by produceState<Bitmap?>(
         initialValue = null,
-        key1 = file.absolutePath,
+        key1 = file.absolutePath + ":" + project.thumbnailPath,
         key2 = file.lastModified(),
         key3 = file.length()
     ) {
         value = try {
-            withContext(Dispatchers.IO) { loadVideoThumbnail(file) }
+            withContext(Dispatchers.IO) {
+                project.thumbnailPath?.let(android.graphics.BitmapFactory::decodeFile) ?: loadVideoThumbnail(file)
+            }
         } catch (cancelled: CancellationException) {
             throw cancelled
         } catch (_: Exception) {

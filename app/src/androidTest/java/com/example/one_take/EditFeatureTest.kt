@@ -99,6 +99,10 @@ class EditFeatureTest {
             exported = jobs.exportedFile
             assertNotNull(exported)
             assertEquals(originalHash, hash(source))
+            val project = com.example.one_take.projects.ProjectStore(context).load(
+                com.example.one_take.projects.ProjectStore.idFor(source))
+            assertNotNull("Edit/export flow must retain its project manifest", project)
+            assertEquals(source.canonicalPath, project!!.originalVideoPath)
             val metadata = MediaMetadataRetriever()
             try {
                 metadata.setDataSource(exported!!.absolutePath)
@@ -132,10 +136,10 @@ class EditFeatureTest {
             edits.remove(raw.outputFile)
             com.example.one_take.engine.EngineProjectStore(context).remove(raw.outputFile)
             raw.discard()
-            store.deleteVideo(raw.outputFile)
+            com.example.one_take.projects.ProjectStore(context).deleteSource(raw.outputFile)
             exported?.let {
                 com.example.one_take.engine.EngineProjectStore(context).remove(it)
-                store.deleteVideo(it)
+                com.example.one_take.projects.ProjectStore(context).deleteSource(it)
             }
         }
     }

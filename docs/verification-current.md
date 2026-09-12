@@ -1,5 +1,42 @@
 # Current verification
 
+## ProjectStore #53 and manifest-backed #63, 2026-09-12
+
+Base: `9e21147` after PR #75 merged; branch `feat/53-project-store`.
+See [the storage contract](project-store.md) and [Projects integration](projects-screen.md).
+
+Focused unit validation passes 33 tests: 14 ProjectStore, 5 ProjectCatalog, and 14 EngineProjectStore.
+Coverage includes versioned round-trip, unknown-field preservation, idempotent migration, capture-header races,
+recovery of missing metadata, exact document order, stale revisions, failures before/after manifest publication,
+asset confinement, invalid durations, and active-recording deletion protection.
+
+```powershell
+$env:JAVA_HOME = 'C:/Program Files/Android/Android Studio/jbr'
+./gradlew.bat :app:testDebugUnitTest --tests com.example.one_take.projects.ProjectStoreTest --tests com.example.one_take.ProjectCatalogTest --tests com.example.one_take.engine.EngineProjectStoreTest :app:compileDebugAndroidTestKotlin --console=plain
+./gradlew.bat :app:assembleDebug :app:assembleDebugAndroidTest :app:lintDebug --console=plain
+```
+
+App/test APK assembly and instrumentation compilation passed. Lint reports zero errors, 29 warnings and two hints.
+A broader host run during this task retained the nine known Windows failures (two VideoStore marker assertions,
+seven VisualAnalyzer native-library failures); it was not a passing full suite. Subsequent store-only recovery and
+invalid-input guards were validated by the focused unit run above.
+
+On the ADB-discovered I2501 `10BFC41SMX001UZ`, direct instrumentation passed all six cases in 12.862 seconds
+without foreground intervention: five ProjectsFlowTest cases and EditFeatureTest's caption-free edit/export case.
+The full edit/export cycle retained the original SHA-256 and its project manifest. Reopening by project ID,
+script header restoration, safe deletion, unavailable details, and byte-for-byte preservation of reordered timeline
+JSON through the explicit recording fallback passed. This does not verify rendering reordered clips in the new editor.
+
+```powershell
+adb -s 10BFC41SMX001UZ install -r app/build/outputs/apk/debug/app-debug.apk
+adb -s 10BFC41SMX001UZ install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+adb -s 10BFC41SMX001UZ shell am instrument --user 0 -w -r -e class 'com.example.one_take.ProjectsFlowTest,com.example.one_take.EditFeatureTest#editsExportWithoutCaptionsWithoutChangingOriginal' com.example.one_take.test/androidx.test.runner.AndroidJUnitRunner
+```
+
+Evidence remains in ignored `app/build/project-store-*.log`. No app uninstall/data clear was used.
+CameraRecorder and VideoStore implementations were unchanged. Simulated I/O errors verify atomic-publication
+behavior; physical power loss and multi-process stress were not tested. Clip-editor integration remains #54/#64.
+
 ## Atomic commit ba90938 recheck, 2026-09-12
 
 On the user's subsequent request to test the commit, the focused check passed:
