@@ -1,0 +1,28 @@
+<resources>
+    <string name="feature_marketplace_title">Feature marketplace</string>
+    <string name="feature_offline_captions">Offline captions</string>
+    <string name="feature_offline_captions_description">Prepare captions while you record and automatically save a captioned copy after Stop. Your video and voice stay on this phone.</string>
+    <string name="feature_model_source">Model: ggerganov/whisper.cpp on Hugging Face</string>
+    <string name="feature_model_license">Model license: MIT</string>
+    <string name="feature_download_model">Download model</string>
+    <string name="feature_cancel_download">Cancel download</string>
+    <string name="feature_retry_download">Retry download</string>
+    <string name="feature_remove_model">Remove model</string>
+    <string name="feature_remove_model_title">Remove offline captions?</string>
+    <string name="feature_remove_model_message">This removes the downloaded caption model. You can download it again later.</string>
+    <string name="feature_model_downloaded">Model downloaded and ready</string>
+    <string name="feature_model_checking">Checking downloaded model…</string>
+    <string name="feature_model_verifying">Verifying model…</string>
+    <string name="feature_model_download_progress">%1$d%% • %2$s of %3$s</string>
+    <string name="feature_model_in_use">Captions are currently using this model.</string>
+    <string name="feature_enable_captions">Auto-caption new recordings</string>
+    <string name="feature_model_size">Download size: %1$s</string>
+    <string name="feature_error_network">The model could not be downloaded. Check your connection and try again.</string>
+    <string name="feature_error_invalid_response">The model server returned an invalid response.</string>
+    <string name="feature_error_download_too_large">The download was larger than expected and was rejected.</string>
+    <string name="feature_error_incomplete_download">The download ended before the model was complete.</string>
+    <string name="feature_error_checksum_mismatch">The downloaded model failed verification and was discarded.</string>
+    <string name="feature_error_storage_unavailable">The app could not prepare secure storage for the model.</string>
+    <string name="feature_error_insufficient_storage">There is not enough free storage for this model.</string>
+    <string name="feature_error_install_failed">The verified model could not be installed. Try again.</string>
+</resources>

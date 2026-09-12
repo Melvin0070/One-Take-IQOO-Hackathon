@@ -1,0 +1,8 @@
+<resources>
+    <string name="caption_preset_title">Caption style</string>
+    <string name="caption_preset_clean">Clean</string>
+    <string name="caption_preset_bold">Bold</string>
+    <string name="caption_preset_minimal">Minimal</string>
+    <string name="caption_preset_preview">Your words</string>
+    <string name="caption_preset_option_description">Caption style: %1$s</string>
+</resources>

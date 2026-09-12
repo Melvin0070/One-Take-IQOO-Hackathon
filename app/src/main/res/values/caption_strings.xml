@@ -1,0 +1,19 @@
+<resources>
+    <string name="caption_marketplace">Feature marketplace</string>
+    <string name="caption_file_busy">This video is being processed. Wait or cancel before deleting it.</string>
+    <string name="caption_generating">Generating captions offline…</string>
+    <string name="caption_exporting">Saving captioned video… %1$d%%</string>
+    <string name="caption_keep_open">Keep the app open until processing finishes.</string>
+    <string name="caption_generate">Generate captions</string>
+    <string name="caption_download">Download Offline Captions</string>
+    <string name="caption_edit">Edit captions</string>
+    <string name="caption_save_copy">Save captioned copy</string>
+    <string name="caption_saved">Captioned copy saved. Your original is unchanged.</string>
+    <string name="caption_open_copy">Play captioned copy</string>
+    <string name="caption_no_speech">No speech was detected. Try a recording with clear speech.</string>
+    <string name="caption_other_job">Another video is being processed.</string>
+    <string name="caption_save_edits">Save changes</string>
+    <string name="caption_edit_title">Edit caption text</string>
+    <string name="caption_line">Caption %1$d</string>
+    <string name="caption_edit_error">Caption changes could not be saved. Please retry.</string>
+</resources>

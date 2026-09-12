@@ -1,0 +1,7 @@
+<resources>
+    <string name="save_edited_copy">Save edited copy</string>
+    <string name="share_video">Share video</string>
+    <string name="share_original">Share original</string>
+    <string name="share_captioned_copy">Share exported copy</string>
+    <string name="share_unavailable">This video could not be shared. Please try again.</string>
+</resources>
