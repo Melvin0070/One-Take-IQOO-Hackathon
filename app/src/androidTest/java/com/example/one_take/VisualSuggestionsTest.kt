@@ -5,12 +5,12 @@ import android.graphics.Bitmap
 import android.os.Looper
 import android.os.ParcelFileDescriptor
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
-import androidx.lifecycle.Lifecycle
 import androidx.test.platform.app.InstrumentationRegistry
 import com.example.one_take.captions.CaptionJobs
 import com.example.one_take.ui.theme.OneTakeTheme
@@ -41,7 +41,9 @@ class VisualSuggestionsTest {
     }
 
     @After fun removeOnlyTestRecording() {
-        compose.activityRule.scenario.moveToState(Lifecycle.State.CREATED)
+        // Dispose the recorder while keeping the Activity foregrounded: I2501 freezes
+        // background instrumentation before asynchronous metadata cleanup can finish.
+        compose.runOnUiThread { compose.activity.setContent {} }
         compose.waitUntil(60_000) {
             store.directory.listFiles().orEmpty().none {
                 it.name !in existingFiles && it.name.endsWith(".pending")
