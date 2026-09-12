@@ -1,5 +1,8 @@
 # Qualcomm Whisper graph execution
 
+> Historical prototype record: the implementation and measurements described here are archived under `experiments/` and excluded from the current nine-module build.
+> Run the historical build commands from the [tested prototype checkout](../experiments/AGENTS.md), not from the current repository root.
+
 This implementation targets the owner’s iQOO 15, I2501 / SM8850 / V81.
 The tested firmware fingerprint is `iQOO/I2501i/I2501:16/BP2A.250605.031.A3_V000L1/compiler251211075749:user/release-keys`.
 It adds the native graph execution layer for [issue #3](https://github.com/Melvin0070/One-Take-IQOO-Hackathon/issues/3).
@@ -36,6 +39,8 @@ The graph adapter does not mark the application’s full caption model validated
 ## Local build and device checks
 
 Use the installed QAIRT SDK with QnnSystem and the existing HTP libraries.
+
+The following command is from the archived prototype checkout:
 
 ```sh
 ANDROID_HOME=/path/to/android-sdk \

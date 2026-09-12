@@ -1,5 +1,8 @@
 # QNN graph execution implementation plan
 
+> Historical prototype record: the implementation and measurements described here are archived under `experiments/` and excluded from the current nine-module build.
+> Run the historical build commands from the [tested prototype checkout](../../experiments/AGENTS.md), not from the current repository root.
+
 Goal: execute the official Whisper Tiny encoder and decoder through an engine-owned Android HTP session on the iQOO 15.
 This is the native execution layer for issue #3; caption decoding, timestamps and production activation remain subsequent integration work.
 
@@ -15,7 +18,7 @@ Keep vendor artifacts outside Git.
 
 ## Tasks
 
-- [x] Implement `QnnGraphSession` and JNI context loading/execution in `engine-android`.
+- [x] Implement `QnnGraphSession` and JNI context loading/execution in `experiments/recorder-engine-android`.
 - [x] Add checked tensor metadata and input validation tests.
 - [x] Package local QnnSystem with the existing optional QAIRT build.
 - [x] Add an opt-in Android device test using the exact downloaded encoder and decoder hashes.

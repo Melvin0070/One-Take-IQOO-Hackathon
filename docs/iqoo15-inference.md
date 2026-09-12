@@ -1,5 +1,8 @@
 # iQOO 15 inference framework
 
+> Historical prototype record: the implementation and measurements described here are archived under `experiments/` and excluded from the current nine-module build.
+> Run the historical build commands from the [tested prototype checkout](../experiments/AGENTS.md), not from the current repository root.
+
 This change starts [issue 1](https://github.com/Melvin0070/One-Take-IQOO-Hackathon/issues/1).
 It does not complete the requirement to execute all production neural models on the NPU.
 The target is the owner’s iQOO 15, identified as I2501 / SM8850 with Android 16.
@@ -15,7 +18,7 @@ Release failures are explicit diagnostics and stop preparation fallback.
 Silero uncertainty remains a successful computation with an `UNKNOWN` speech result; the JNI boundary now distinguishes it from a computation failure.
 Existing task adapters retain native cancellation, model verification, frame validation, and resource ownership.
 
-`:engine-android` supplies Android runtime integration.
+The archived `experiments/recorder-engine-android/` module supplied Android runtime integration.
 `QnnRuntimeProbe.inspect(context)` opens the packaged HTP backend, selects the compatible QNN interface, creates backend/device handles, and releases them.
 Call it from a background thread.
 `RUNTIME_READY` means initialization succeeded; `modelExecutionVerified` remains false because this probe never executes a model.
@@ -29,6 +32,8 @@ Set `QAIRT_SDK_ROOT` to a local SDK directory that the Gradle JVM can read.
 On this Mac, the build process could not access Downloads, so the required SDK files were staged under the user’s Library/Caches directory.
 Do not copy vendor platform libraries such as `libcdsprpc.so` into the APK.
 The library manifest declares access to the device’s existing driver.
+
+The following command is from the archived prototype checkout:
 
 ```sh
 JAVA_HOME='/Applications/Android Studio.app/Contents/jbr/Contents/Home' \

@@ -1,170 +1,218 @@
-# Agent context and profiling workflow
+# One-Take — agent guide
 
-## Scope and intent
+**A script supervisor in the viewfinder.** While you film, it knows which lines of your
+script still lack a clean take, asks for exactly those between lines, tells you when it is
+safe to wrap, and plays the finished, captioned cut the moment you stop. On the phone,
+offline.
 
-This workspace contains a Kotlin/Compose/CameraX video recorder and a standalone Android developer monitoring tool in `tools/device-monitor/`.
-The long-term goal is to connect a phone, discover available performance signals, and give a coding agent evidence for improving an app.
-The current implementation supports Android over ADB, not every phone platform.
-Keep monitoring changes separate from recorder app changes unless the task requires both.
+Built for the iQOO City Battles, Chennai, **Sep 12–13 2026**. Android, Kotlin, Compose.
+Three humans and many agents. The three source documents are
+[`One-Take-Design-v3.md`](One-Take-Design-v3.md) (why),
+[`One-Take-Contract.md`](One-Take-Contract.md) (what, authoritative) and
+[`One-Take-Playbook.md`](One-Take-Playbook.md) (who, when, gates).
 
-The user explicitly chose the actual Perfetto UI hosted locally after rejecting the custom dashboard.
-Preserve that decision: use Perfetto's timeline and analysis tools rather than rebuilding its interface.
-Our code owns capture, capability discovery, data conversion, and AI-readable summaries.
-An automated AI optimization loop is not implemented.
+---
 
-## Start here
+## Read this in five minutes
 
-- Read `tools/device-monitor/README.md` for commands and metric semantics.
-- Read `tools/device-monitor/VERIFICATION.md` for dated hardware evidence and remaining gaps.
-- Read the root `README.md` before changing the recorder app.
-- Check current files, connected devices, and running servers; do not assume a previous session's processes or hardware are still available.
-- Run commands below from the repository root.
+1. This file — the invariants, the map, the working agreement.
+2. [`docs/agents/landmines.md`](docs/agents/landmines.md) — verified traps that each cost
+   somebody a morning. **Read before touching `:asr`, `:npu`, `:media` or `:capture`.**
+3. Your module's `AGENTS.md` (e.g. [`asr/AGENTS.md`](asr/AGENTS.md)).
+4. [`docs/agents/lanes.md`](docs/agents/lanes.md) — pick up work without asking.
 
-## Code map
+Everything else is reference you pull when you need it. The index is
+[`docs/agents/README.md`](docs/agents/README.md).
 
-| File | Responsibility |
-| --- | --- |
-| `tools/device-monitor/device_monitor.py` | ADB discovery, capability probing, sampled collectors, NDJSON recording |
-| `tools/device-monitor/dashboard.py` | Session validation, summaries, comparisons, official UI serving, `/api/session`, generated `/trace` |
-| `tools/device-monitor/perfetto_local.py` | Official UI installation, native Android trace capture, localhost trace serving |
-| `tools/device-monitor/perfetto_export.py` | `convert_session(report)` and NDJSON to Chrome Trace Event JSON CLI |
-| `tools/device-monitor/genie_run.py` | Bounded SM8850 QnnHtp LLM execution with raw Genie profiling |
-| `tools/device-monitor/genie_trace.py` | Derived Perfetto lanes for crossing Genie slices without changing timings |
-| `tools/device-monitor/test_*.py` | Parser, fake-ADB, export, capture, and HTTP regression coverage |
+---
 
-The monitoring tools use Python's standard library.
-Capture requires ADB; downloading the UI requires `curl` and internet once.
-The installed upstream UI and WebAssembly trace processor run locally.
-Optional upstream links and online features can still contact external services.
+## You have a lot of latitude here
 
-## Efficient profiling loop
+This repo is a **starting point, not a cage.** The scaffold was generated from the Contract
+in one pass by one agent; it has not been through a build on the target device, and it is
+very likely wrong somewhere. If a better design is in front of you, take it.
 
-1. Define one reproducible action and a measurable hypothesis, such as CPU cost during caption generation.
-2. Discover the device and probe its actual capabilities before choosing metrics.
-3. Start with a short sampled baseline, usually 30 seconds at a one-second interval.
-4. Read the JSON summary and coverage before opening the full timeline.
-5. Capture a short native Perfetto trace when scheduling, CPU frequency, or process activity needs investigation.
-6. Use Perfetto's timeline and SQL interface to investigate the relevant interval.
-7. Make one focused code change, then repeat the same workload and compare recordings.
-8. Report observed differences, repeatability, missing measurements, and validation evidence.
+**Change freely, no permission needed:** any implementation, any file layout inside a
+module, any Gradle setting, dependency versions, the module split itself, test strategy,
+UI structure, threading inside a module, naming, the scaffold's TODO stubs — all of it. If
+`engine/src/main/kotlin/.../CoverageEngine.kt`'s reorder-window approach is wrong, replace
+it. If a module boundary is costing more than it buys, collapse it.
 
-Keep the device, app build/configuration, workload, duration, interval, charging state, and starting thermal conditions comparable.
-Repeat runs before attributing a small difference to a code change.
-Aggregate device CPU includes other processes; it is not the app's CPU usage.
-Use `--package` for app PSS memory, not per-app CPU attribution.
-Avoid dumping complete traces or every sample into model context; prefer summaries and targeted query results.
-Do not claim an optimization from one lower average or from a successful trace import alone.
+**Say so in the commit, then proceed:** anything that changes a type in
+[`docs/agents/contract.md`](docs/agents/contract.md) (other lanes compile against it), adds
+a dependency, adds a permission, or changes a number that appears on the eval card.
+
+**Stop and ask a human:** only if the change would make a claim we make on stage untrue —
+the privacy promises (P1–P5), the requirement acceptance tests (R1–R25), or a number
+already printed on the eval card. Those are promises to a jury, not engineering choices.
+
+The invariants below are short on purpose. They are the things where the failure is
+**silent** — where being wrong doesn't show up until you are on stage. Everything not on
+that list is yours.
+
+---
+
+## Invariants
+
+Seven. Each one exists because its failure mode is invisible until it is expensive.
+
+1. **`:engine` never imports `android.*`.** Enforced by the compiler — it uses
+   `kotlin("jvm")`, so the Android SDK is not on its classpath. This is what makes the
+   brain testable in two seconds instead of two minutes on a device, which is what makes
+   automated gate checks possible at all.
+
+2. **One clock: the audio sample index.** 16 kHz mono, one sample = 62.5 µs. Every ledger
+   event, take boundary and edit point is a `Long` sample index. Wall-clock appears in log
+   lines and nowhere else. A `System.currentTimeMillis()` in the fold is the one thing that
+   breaks deterministic replay (R14), and it will not show up in any test you write.
+
+3. **VAD indices cut audio. ASR timestamps do not.** Transducer timestamps are 40 ms-grid
+   emission peaks over BPE sub-word tokens with undocumented lag — not word boundaries. Use
+   them for *which line, roughly where*. Cut on VAD silences. Crossing the two produces a
+   clipped word inside the payoff beat. ([landmines L4](docs/agents/landmines.md))
+
+4. **`CoverageEngine.submit()` is single-threaded and totally ordered.** One channel, one
+   consumer loop. No locks, no threads, no randomness inside the fold. Replay, the eval
+   harness and replay-driven UI are then the same line: `inputs.forEach(engine::submit)`.
+
+5. **Nothing is destructive.** Scratch, edit, delete-line, lost video and undo all *set a
+   field*. Raw files and the ledger are always kept. Derived state is recomputed from the
+   append-only log, which is why a crash cannot corrupt a project (R13).
+
+6. **Precision over recall, everywhere.** A clean read flagged in front of a juror costs
+   more than a missed flub — the pickup list still catches the flub. When a threshold is a
+   judgement call, pick the one that flags less. Every automatic decision is visible in
+   words and reversible in one tap.
+
+7. **Nothing ships unverified.** Every feature above Tier 0 sits behind a flag in
+   `FeatureFlags`, off by default. A flag turns on when its own check passes *and* the
+   Tier 0 check still passes. No number reaches a slide unless it was measured on the
+   build it describes.
+
+---
+
+## Where things are
+
+```
+:engine          PURE JVM. Interfaces, aligner, ledger, coverage fold, normalizer,
+                 edit-list rules, config. Depends on nothing. The brain.
+:engine-fixtures Corpus loader, golden ledgers, FakeRecognizer, FakeVad, FakeVision.
+:eval            JVM CLI. corpus -> eval card, in one command.
+:asr             sherpa-onnx CPU: Silero VAD, streaming transducer, keyword spotting.
+:npu             LiteRT + Qualcomm accelerator. The ONLY module that links QNN.
+:capture         CameraX video, AudioRecord, foreground service, WAV, timebase anchor.
+:media           Media3 playback from the edit list, Transformer export, captions.
+:link            Multicam pairing, key exchange, encrypted transfer. Tier 2.
+:app             Compose UI, every screen, debug panel, DI wiring, ATTRIBUTION.
+
+experiments/     The pre-event prototype. NOT in the build. A mining reference for
+                 working CameraX / VAD / JNI / Media3 patterns. See experiments/AGENTS.md.
+config/          Permission + dependency allowlists, debug keystore.
+docs/agents/     This context pack.
+```
+
+The module graph **is** the parallelization plan: lanes in different modules do not touch
+the same files, so agents do not conflict. If you need to change a file in someone else's
+module, that is a signal the seam is in the wrong place — say so rather than reaching
+across.
+
+## Which document answers which question
+
+| Question | Read |
+|---|---|
+| What am I building, in what order? | [`docs/agents/lanes.md`](docs/agents/lanes.md) |
+| What are the exact types? | [`docs/agents/contract.md`](docs/agents/contract.md), then `engine/src/main/kotlin/` |
+| What does "done" mean for this feature? | [`docs/agents/requirements.md`](docs/agents/requirements.md) — R1–R25, each with its test |
+| Why does this API not work the obvious way? | [`docs/agents/landmines.md`](docs/agents/landmines.md) |
+| Was this already decided? | [`docs/agents/decisions.md`](docs/agents/decisions.md) — **check before re-litigating** |
+| What word does the UI use for this? | [`docs/agents/glossary.md`](docs/agents/glossary.md) |
+| How do I run / test / verify? | [`docs/agents/workflow.md`](docs/agents/workflow.md) |
+| How do the pieces fit? | [`docs/agents/architecture.md`](docs/agents/architecture.md) |
+| The full product argument | [`One-Take-Design-v3.md`](One-Take-Design-v3.md) |
+
+---
 
 ## Commands
 
-Discover and probe:
+```bash
+export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
+export ANDROID_HOME="$HOME/Library/Android/sdk"
 
-```sh
-python3 tools/device-monitor/device_monitor.py devices
-python3 tools/device-monitor/device_monitor.py probe
+./gradlew :engine:test              # the brain. ~2s. Run this constantly.
+./gradlew verify                    # tests + assembleDebug + guards. Before every commit.
+./gradlew guards                    # R17 permissions + P4 dependency allowlist
+./gradlew generateAttribution       # regenerate ATTRIBUTION.md from the resolved graph
+./gradlew :app:assembleDebug
+./gradlew :eval:run --args="--corpus corpus/ --out eval-card.md"
+
+adb install -r app/build/outputs/apk/debug/app-debug.apk   # NEVER uninstall: wipes models
 ```
 
-With multiple devices, pass `--serial SERIAL` to probe and recording commands.
-ADB is discovered automatically; use `--adb PATH` when necessary.
-Discover the current serial rather than hardcoding the previously tested phone.
+`./gradlew verify` is the gate. If it is red, you are not done — say it is red rather than
+describing the change as complete.
 
-Create a unique directory for each experiment, then record a baseline while reproducing the workload:
+---
 
-```sh
-mkdir -p tools/device-monitor/runs
-profile_run_dir=$(mktemp -d tools/device-monitor/runs/profile-XXXXXX)
-python3 tools/device-monitor/device_monitor.py record \
-  --duration 30 --interval 1 --package com.example.one_take \
-  --output "$profile_run_dir/baseline.ndjson"
-python3 tools/device-monitor/dashboard.py "$profile_run_dir/baseline.ndjson" --summary
-```
+## Working agreement
 
-Keep `profile_run_dir` in the same shell or replace it with the printed/saved directory path when using another terminal.
-Output capture files are created exclusively; choose a new filename instead of overwriting evidence.
-An app with no running process can legitimately have unavailable package memory.
+**Trunk-based, small commits, merge hourly.** Long branches are how a hackathon loses four
+hours at 23:00. Trunk must build and pass `:engine:test` before any merge.
 
-Install the UI once, then view the sampled session:
+**Conventional Commits**, no attribution trailers:
+`feat(engine): close takes on line-end pause`, `fix(asr): raise maxSpeechDuration`.
 
-```sh
-python3 tools/device-monitor/perfetto_local.py install
-python3 tools/device-monitor/dashboard.py "$profile_run_dir/baseline.ndjson"
-```
+**Comment only non-obvious *why*** — intent, trade-offs, the landmine you just avoided.
+Never restate what the code does. The existing comments in `:engine` are the house style:
+each one explains a decision that will otherwise be undone by the next reader.
 
-Open the exact URL printed by the server, including its trace-loading hash.
-The dashboard defaults to `127.0.0.1:8765`; pass `--port` if occupied.
-The server runs in the foreground; use another terminal for capture or stop it with Ctrl+C.
-An open Perfetto timeline is a snapshot, even though `/api/session` and `/trace` reread the source file.
-Reopen the printed trace URL to load newly recorded samples.
+**When you finish a unit of work**, say in two lines what changed and what you verified.
+If something is unverified, say that instead of implying it passed.
 
-For a native system trace:
+**When you are blocked**, do everything that doesn't depend on the answer first, then state
+the assumption you made and keep going. Do not stall a lane waiting for a human — three of
+them are asleep in shifts.
 
-```sh
-python3 tools/device-monitor/perfetto_local.py record \
-  --duration 10 --output "$profile_run_dir/native.pftrace"
-python3 tools/device-monitor/perfetto_local.py serve \
-  --trace "$profile_run_dir/native.pftrace"
-```
+### Things that will waste your time if nobody tells you
 
-The native UI server defaults to `127.0.0.1:10000`.
-Native and sampled recordings are separate traces; automatic clock alignment and merging are not implemented.
+- **Do not add a dependency casually.** `./gradlew guardDependencies` will fail you.
+  Answer three questions in the commit: does it add a permission, does it make a network
+  call, does it ship a second ONNX Runtime or QNN runtime. A second `libonnxruntime.so`
+  fails at `dlopen` — at runtime, on the phone, at 23:00 — not at build time.
+- **Do not add a manifest permission** without adding it to
+  `config/allowed-permissions.txt` with a reason. `INTERNET` in the single-phone build
+  breaks P1, which is a promise made on stage to an infosec juror.
+- **Do not tune a threshold on data the eval card reports.** Thresholds are tuned on
+  teammates' reads. Every stranger read is held out and is the only data the card reports.
+- **Do not write a number on a slide that you did not measure on the build it describes.**
+- **Do not use `experimentalSetMp4EditListTrimEnabled`** — the trimmed data stays in the
+  file, which makes The Vanish a lie and P3 false, and the juror can open the file.
 
-After applying a change, reproduce the workload with the same recording options and save it as `after.ndjson`:
+---
 
-```sh
-python3 tools/device-monitor/device_monitor.py record \
-  --duration 30 --interval 1 --package com.example.one_take \
-  --output "$profile_run_dir/after.ndjson"
-python3 tools/device-monitor/dashboard.py "$profile_run_dir/baseline.ndjson" \
-  --compare "$profile_run_dir/after.ndjson"
-python3 tools/device-monitor/perfetto_export.py \
-  "$profile_run_dir/baseline.ndjson" "$profile_run_dir/baseline-trace.json"
-```
+## Current state, honestly
 
-## Data integrity and known pitfalls
+**What is verified:** `./gradlew verify` is green — `:engine`'s tests pass, all nine modules
+compile, `:app:assembleDebug` produces a 44 MB APK, and both guards run against the real
+merged manifest and the real resolved dependency graph. Verified on macOS with Android
+Studio's bundled JDK 25 and SDK 37, on 2026-09-12.
 
-- Preserve `status`, `value`, `unit`, `source`, and `reason` for every metric.
-- Never turn unsupported, unavailable, erroneous, or warming-up readings into zero.
-- CPU utilization needs two `/proc/stat` readings; the first sample is normally warming up.
-- Preserve vendor battery current as raw data when units are unknown; do not label it as amperes.
-- Treat powered and charging as different states.
-- Thermal sensor names and zero readings can be vendor-specific; do not invent a physical interpretation.
-- Summary means are unweighted sample averages, excluding unavailable and nonnumeric readings.
-- Collection overhead measures time spent gathering sequential readings, not incremental CPU load caused by the monitor.
-- Chrome trace timestamps use elapsed seconds converted to microseconds; boolean states use numeric 0/1.
-- Export missing readings as diagnostics and retain nonnumeric values in diagnostic arguments.
-- Perfetto counter plots hold values between samples; consult status events rather than treating a flat segment as proof of continued measurement availability.
+**What the guards already caught, on their first real run:** Media3 declares
+`ACCESS_NETWORK_STATE` and `WAKE_LOCK`, so the merged manifest of an app we call offline
+contained a network permission. Both are now stripped with `tools:node="remove"` — see D33
+in [`docs/agents/decisions.md`](docs/agents/decisions.md). That is the exact failure P1 and
+R17 exist to catch, and it was in the build within an hour of the build existing.
 
-Do not capture native binary traces directly through `adb exec-out perfetto -o -`.
-That path was observed to mix diagnostic text into the binary trace and make Perfetto reject it.
-Keep the unique remote-file capture, separate binary pull, and best-effort cleanup of only the file created by that capture.
+**What does not exist:** the product. `:engine` has the frozen types from Contract §4 and
+`TODO("Lane A: ...")` at every behavioural boundary. `:engine-fixtures` has real, working
+fakes — those unblock seven lanes, so they were built for real rather than stubbed. The six
+Android modules are shells with their port implementations declared and their landmines
+documented at the call site.
 
-Keep upstream generated UI assets unchanged.
-The pinned version is defined in `perfetto_local.py`; consult that constant rather than assuming a release is current.
-Preserve manifest checksum checks, failed-install readiness invalidation, localhost binding, and static path confinement.
-Do not disable TLS verification to work around certificate errors.
-Keep `.cache/` and `runs/` out of version control and do not upload device traces without authorization.
-Never read or modify `.env` files without asking first.
+**What is unproven:** everything on hardware. Nothing has run on the target device, and
+several pinned choices — sherpa 1.13.8, LiteRT `qualcomm_runtime_v81`, Architecture B
+concurrent capture, the `Accelerator.NONE` trick — are **researched but unverified on this
+phone**. The bring-up harness in
+[`docs/agents/workflow.md`](docs/agents/workflow.md#device-bring-up) exists to prove or kill
+each of them in the first thirty minutes on a loaner.
 
-## Verification and completion
-
-For monitoring code changes, run:
-
-```sh
-python3 -m unittest discover -s tools/device-monitor -p 'test_*.py' -v
-```
-
-For capture, export, or UI integration changes, also exercise the affected real flow and open its resulting trace in the local Perfetto UI when hardware is available.
-Verify actual tracks and import errors; a successful command exit alone is insufficient.
-Use the `chrome-devtools-axi` CLI for browser work and consult its current help.
-Run the recorder's documented Android checks when recorder code changes, not for unrelated monitoring documentation edits.
-Update `VERIFICATION.md` with actual commands, results, hardware, and remaining gaps after meaningful validation.
-Do not treat historical test counts as current passing evidence.
-
-As of 2026-09-11, validation covered a Samsung SM-A528B on Android 14 and macOS, including real sampled and native traces and 47 automated tests.
-Other physical devices and host platforms remain unverified.
-GPU/NPU utilization counters, thermal headroom, recorder app event instrumentation, and automatic AI-driven optimization remain future work.
-On 2026-09-12, the iQOO 15 / SM8850 exposed eight type 9 NPU temperature sensors and successfully ran Qwen3-0.6B through QnnHtp with QAIRT 2.50.
-Read `tools/device-monitor/NPU.md` before NPU work.
-Genie traces describe framework/QNN-wrapper calls, not hardware occupancy.
-Keep raw profiles unchanged; synthetic lanes in derived Perfetto traces do not represent OS threads or NPU cores.
-Universal support means capability-aware adapters and honest missing data, not a promise that every phone exposes every counter.
+Assume the scaffold is wrong before you assume the device is.
