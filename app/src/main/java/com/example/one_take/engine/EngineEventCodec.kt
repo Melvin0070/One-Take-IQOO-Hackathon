@@ -11,6 +11,15 @@ internal object EngineEventCodec {
             .put("session", event.sessionId).put("sample", event.sample).put("clock", event.clock.name)
         val change = JSONObject()
         when (val input = event.change) {
+            is Change.ScriptProgressObserved -> change.put("type", "script-progress")
+                .put("current", input.progress.currentIndex).put("reason", input.progress.reason.name)
+                .put("chunks", JSONArray().also { array -> input.progress.chunks.forEach {
+                    array.put(JSONObject().put("id", it.chunk.id).put("text", it.chunk.text)
+                        .put("state", it.state.name).put("coverage", it.coverage).put("attempts", it.attempts))
+                } })
+            is Change.TakeAttemptObserved -> change.put("type", "take-attempt")
+                .put("chunk", input.attempt.chunkId).put("attempt", input.attempt.attempt)
+                .put("segment", input.attempt.segmentId)
             is Change.SourceFinalized -> change.put("type", "source-finalized")
                 .put("source", input.sourceId).put("duration", input.durationSamples)
                 .put("anchorSample", input.anchor.sampleIndex).put("anchorVideoUs", input.anchor.videoTimeUs)
@@ -52,6 +61,11 @@ internal object EngineEventCodec {
         require(value.getInt("version") == 1) { "Unsupported engine ledger version" }
         val data = value.getJSONObject("change")
         val change = when (data.getString("type")) {
+            "script-progress" -> Change.ScriptProgressObserved(ScriptProgress(data.getJSONArray("chunks").objects().map {
+                ChunkCoverage(ScriptChunk(it.getString("id"), it.getString("text")),
+                    ScriptChunkState.valueOf(it.getString("state")), it.getDouble("coverage"), it.getInt("attempts"))
+            }, data.getInt("current"), ScriptProgressReason.valueOf(data.getString("reason"))).frozen())
+            "take-attempt" -> Change.TakeAttemptObserved(TakeAttempt(data.getString("chunk"), data.getInt("attempt"), data.getString("segment")))
             "source-finalized" -> Change.SourceFinalized(data.getString("source"), data.getLong("duration"),
                 VideoAnchor(data.getLong("anchorSample"), data.getLong("anchorVideoUs")))
             "captions-replaced" -> Change.CaptionsReplaced(data.getJSONArray("captions").objects().map {
