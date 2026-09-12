@@ -193,7 +193,7 @@ private fun VisualSuggestionsSheet(
                 )
             }
             TextButton(onClick = onDismiss, modifier = Modifier.align(Alignment.End)) {
-                Text(stringResource(R.string.visual_suggestions_dismiss))
+                Text(stringResource(R.string.visual_suggestions_dismiss), color = Color.White)
             }
         }
     }
