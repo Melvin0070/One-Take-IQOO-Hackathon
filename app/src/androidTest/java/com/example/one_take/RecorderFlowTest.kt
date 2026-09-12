@@ -52,6 +52,7 @@ class RecorderFlowTest {
         // complete. Recreating it makes the test start from the real camera screen.
         compose.activityRule.scenario.recreate()
         compose.waitForIdle()
+        compose.onNodeWithText("Assisted Mode").performClick()
     }
 
     @After

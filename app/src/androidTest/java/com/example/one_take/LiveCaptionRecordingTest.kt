@@ -8,6 +8,7 @@ import android.os.SystemClock
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.platform.app.InstrumentationRegistry
 import com.example.one_take.captions.CaptionJobs
@@ -23,6 +24,7 @@ class LiveCaptionRecordingTest {
     @get:Rule val compose = createAndroidComposeRule<MainActivity>()
 
     @Test fun thirtySecondRecordingBuildsCaptionsBeforeStopAndExportsAutomatically() {
+        compose.onNodeWithText("Assisted Mode").performClick()
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
         val store = VideoStore(context.filesDir)

@@ -1,5 +1,60 @@
 # Current verification
 
+## Assigned recording UI, 2026-09-12 (Windows)
+
+Work began from freshly pulled `origin/main` at `974c489` after the requested tracked/untracked cleanup.
+Implementation order and dependency boundaries are in [assigned recording UI](assigned-recording-ui.md).
+Host: Windows, Android Studio JBR 25.0.3; connected phone: iQOO I2501, Android 16 / SDK 36, serial `10BFC41SMX001UZ`.
+This is a different physical serial from the historical macOS validation below.
+
+From PowerShell at the repository root:
+
+```powershell
+$env:JAVA_HOME = 'C:/Program Files/Android/Android Studio/jbr'
+./gradlew.bat :engine:test testDebugUnitTest --continue --console=plain
+./gradlew.bat lintDebug assembleDebug assembleDebugAndroidTest --console=plain
+```
+
+Unit results: 91/91 engine, 17/17 engine-android, and 133/135 app tests passed (241/243 total).
+The new word-count test passes.
+The full unit command exits unsuccessfully because two unchanged `VideoStoreTest` cases fail on Windows:
+`recoveryRetainsPlayableOutputAndRemovesInvalidPartial` (line 41) and
+`undecidableInterruptedVideoRemainsVisibleAndCanBeDeleted` (line 108).
+Both assert that a pending marker has been removed; the existing implementation attempts deletion while its channel remains open.
+`git diff --quiet HEAD -- app/src/main/java/com/example/one_take/VideoStore.kt app/src/test/java/com/example/one_take/VideoStoreTest.kt` returns zero.
+No recovery/locking behavior was changed to work around these failures.
+
+Build and instrumentation APK assembly pass. Lint has zero errors, 29 warnings, and two hints;
+none reference the new Home, script-entry, recording-setup, or overlay files.
+Evidence logs remain under ignored `app/build/recording-ui-validation/`.
+
+The app and test APKs were installed with `adb install -r`, preserving the existing installation.
+Direct instrumentation completed with `OK (17 tests)` in 371.68 seconds:
+four `RecordingModeFlowTest`, three `RecordingOverlayTest`, six `RecorderFlowTest`,
+one `CameraLayoutTest`, and three `RecorderControlsTest` tests.
+This covers clipboard paste, draft/accepted-script recreation, Home/Projects navigation,
+the three-line transcript limit (including a long segment), mode separation, missing-model behavior,
+real video capture/playback, background finalization, recovery, and confirmed retake/deletion.
+Test cleanup removes only recordings created by the tests.
+The run needed explicit `adb shell am start -n com.example.one_take/.MainActivity` foregrounding
+when Vivo Remote Control became foreground; it is not an unattended background-execution result.
+After the final pluralization, library-return, and theme-consistent text-measurement changes,
+the APKs were rebuilt/reinstalled and all seven new mode/overlay tests passed again in 12.705 seconds,
+without foreground assistance (`device-ui-final.log`).
+Draft persistence was checked through Activity recreation and a fresh store instance;
+a separately orchestrated OS process-kill test was not run.
+
+```powershell
+adb -s 10BFC41SMX001UZ install -r app/build/outputs/apk/debug/app-debug.apk
+adb -s 10BFC41SMX001UZ install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+adb -s 10BFC41SMX001UZ shell am instrument --user 0 -w -r -e class com.example.one_take.RecordingModeFlowTest,com.example.one_take.RecordingOverlayTest,com.example.one_take.RecorderFlowTest,com.example.one_take.CameraLayoutTest,com.example.one_take.RecorderControlsTest com.example.one_take.test/androidx.test.runner.AndroidJUnitRunner
+```
+
+The new mode-aware engine session header (#45/#57), matcher-driven teleprompter (#48/#58),
+and replacement Projects/editor flow remain separate open work.
+The transcript overlay uses the existing caption pipeline and was tested with injected segments;
+fresh model download and live ASR accuracy are not part of this UI validation.
+
 ## iQOO 15 inference framework, 2026-09-12
 
 The SDK-enabled debug build and instrumentation APK build passed on macOS using Android Studio’s JBR and QAIRT 2.50.0.260828.

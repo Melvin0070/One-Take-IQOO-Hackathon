@@ -94,6 +94,7 @@ class LiveEngineProcessDeathTest {
         // The verify stage starts from a fresh target process after the host
         // force-stop. Recreate also clears the permission-gate composition.
         compose.activityRule.scenario.recreate()
+        compose.onNodeWithText("Assisted Mode").performClick()
         waitForEnabledContentDescription(START_RECORDING)
     }
 

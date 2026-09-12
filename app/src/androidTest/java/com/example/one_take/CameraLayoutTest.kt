@@ -29,6 +29,7 @@ class CameraLayoutTest {
             )).use { it.readBytes() }
         }
         compose.activityRule.scenario.recreate()
+        compose.onNodeWithText("Assisted Mode").performClick()
     }
 
     @Test fun cameraSettingsAreAvailableFromPreview() {
