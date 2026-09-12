@@ -26,6 +26,7 @@ Background voices, music, and speech-like noise can prevent cuts; quiet or obscu
 Saved-audio confirmation and Undo remain necessary and do not guarantee that a shared classifier error is impossible.
 
 Each closed candidate enters the durable capture journal in the RECOGNIZER clock.
+Alongside it, a `Silence` session signal with the same id records the unpadded non-speech interval and which rung of the chain (`SILERO`, `WEBRTC`, `NEAR_SILENCE`) produced it.
 It updates the potential-pause count on the capture screen without altering playback or media.
 Candidate ranges remain separate from final cuts and survive project adoption with the same session UUID.
 
@@ -44,6 +45,9 @@ This is a second audio-timeline check using the same algorithm, not an independe
 An intersection must be at least 200 ms and may never extend beyond either interval or the media duration.
 If alignment is unavailable, existing saved-audio pause analysis provides the fallback.
 If alignment succeeds but no candidates are confirmed, the final edit plan has no cuts.
+Every pause in that final decision is also appended to the project ledger as a MEDIA-clock `Silence`, keeping the cut's id with its 200 ms padding restored and bounded by the media duration.
+Its source is the saved-audio classifier's rung, and it is recorded even when an existing edit plan is preserved.
+The live caption window gate on near-digital amplitude only saves Whisper work; it does not produce pause or Silence events.
 
 The app persists confirmed cuts only when no edit plan already exists, preserving user decisions.
 Review uses the existing per-cut Undo/Apply and Restore all controls.

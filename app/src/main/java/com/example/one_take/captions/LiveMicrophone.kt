@@ -5,6 +5,7 @@ import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
 import com.onetake.engine.PauseCandidate
+import com.onetake.engine.VoiceActivitySource
 import com.example.one_take.audio.SpeechPauseDetector
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -38,6 +39,7 @@ internal class LiveMicrophone(
     private var sampleCountState = 0
     private var failureState: String? = null
     private val pauseCandidatesState = ArrayList<PauseCandidate>()
+    private var voiceActivitySourceState: VoiceActivitySource? = null
 
     /** Starts a fresh capture, returning false when AudioRecord is unavailable. */
     fun start(): Boolean = synchronized(lock) {
@@ -49,6 +51,7 @@ internal class LiveMicrophone(
         stopRequested = false
         sampleCountState = 0
         pauseCandidatesState.clear()
+        voiceActivitySourceState = null
 
         val minBufferBytes = try {
             AudioRecord.getMinBufferSize(
@@ -159,6 +162,10 @@ internal class LiveMicrophone(
         pauseCandidatesState.toList()
     }
 
+    /** Which detector produced [pauseCandidates]; null until this capture's detector exists. */
+    val voiceActivitySource: VoiceActivitySource?
+        get() = synchronized(lock) { voiceActivitySourceState }
+
     val sampleCount: Int
         get() = synchronized(lock) { sampleCountState }
 
@@ -174,6 +181,7 @@ internal class LiveMicrophone(
         var emptyReads = 0
         try {
             val activeDetector = SpeechPauseDetector.create(context).also { pauseDetector = it }
+            synchronized(lock) { if (audioRecord === record) voiceActivitySourceState = activeDetector.source }
             while (true) {
                 val requestSize = synchronized(lock) {
                     if (stopRequested || audioRecord !== record) {

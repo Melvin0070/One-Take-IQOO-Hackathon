@@ -36,6 +36,8 @@ internal class LiveCaptionSession(val microphone: LiveMicrophone = LiveMicrophon
                             error("Live captions could not keep up; finishing from the recording.")
                         }
                         val window = audio.copyOfRange(windowStart.coerceAtMost(audio.size), audio.size)
+                        // Only skips inference on near-digital silence. Pauses come from the microphone's
+                        // VAD; gating Whisper on that VAD would drop soft speech it scores as non-speech.
                         if (window.any { abs(it) > .008f }) {
                             val segments = session.transcribe(if (window.size < RATE) window.copyOf(RATE) else window)
                             val endMs = audio.size * 1000L / RATE

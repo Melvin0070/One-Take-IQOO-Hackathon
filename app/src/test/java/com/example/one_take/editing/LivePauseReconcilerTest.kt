@@ -1,6 +1,9 @@
 package com.example.one_take.editing
 
 import com.onetake.engine.PauseCandidate
+import com.onetake.engine.Silence
+import com.onetake.engine.VoiceActivitySource
+import com.onetake.engine.toSilence
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
@@ -197,6 +200,52 @@ class LivePauseReconcilerTest {
 
         assertTrue(overflowingSample.cuts.isEmpty())
         assertTrue(overflowingOffset.cuts.isEmpty())
+    }
+
+    @Test
+    fun mediaSilencesRestorePaddingKeepCutIdsAndSkipOtherCuts() {
+        val final = decision(
+            EditCut("pause-a", 3_000L, 5_000L, "silence (detected live)"),
+            EditCut("stumble", 6_000L, 6_500L, "repeated phrase"),
+            EditCut("silence-7000-8000", 7_000L, 8_000L, "silence", enabled = false),
+        )
+
+        assertEquals(
+            listOf(
+                Silence("pause-a", 44_800L, 83_200L, VoiceActivitySource.WEBRTC),
+                Silence("silence-7000-8000", 108_800L, 131_200L, VoiceActivitySource.WEBRTC),
+            ),
+            LivePauseReconciler.mediaSilences(final, 160_000L, VoiceActivitySource.WEBRTC),
+        )
+    }
+
+    @Test
+    fun mediaSilencesNeverLeaveTheFinalizedMedia() {
+        val final = decision(EditCut("head", 100L, 1_000L, "silence"), EditCut("tail", 9_000L, 9_900L, "silence"))
+
+        assertEquals(
+            listOf(
+                Silence("head", 0L, 19_200L, VoiceActivitySource.SILERO),
+                Silence("tail", 140_800L, 159_000L, VoiceActivitySource.SILERO),
+            ),
+            LivePauseReconciler.mediaSilences(final, 159_000L, VoiceActivitySource.SILERO),
+        )
+    }
+
+    @Test
+    fun confirmedMediaSilenceMatchesItsLiveCopyWhenClocksAgree() {
+        val candidate = candidate("pause-41600-80000", 41_600L, 80_000L)
+        val reconciled = LivePauseReconciler.reconcile(
+            candidates = listOf(candidate),
+            offsetMs = 0L,
+            confirmed = decision(EditCut("offline", 2_000L, 6_000L, "silence")),
+        )
+
+        val live = candidate.toSilence(VoiceActivitySource.SILERO)
+        assertEquals(
+            listOf(live),
+            LivePauseReconciler.mediaSilences(reconciled, 160_000L, VoiceActivitySource.SILERO),
+        )
     }
 
     private fun decision(vararg cuts: EditCut): EditDecision = EditDecision(
