@@ -11,6 +11,9 @@ import com.onetake.engine.ClockDomain
 import com.onetake.engine.EditingEngine
 import com.onetake.engine.Event
 import com.onetake.engine.EventSink
+import com.onetake.engine.SessionMode
+import com.onetake.engine.Silence
+import com.onetake.engine.VoiceActivitySource
 import com.onetake.engine.VideoAnchor
 import org.junit.Assert.*
 import org.junit.Rule
@@ -231,6 +234,35 @@ class EngineProjectStoreTest {
         f.store().saveEdits(f.source, decision.toggle("pause"))
         assertFalse(f.store().read(f.source)!!.edits!!.cuts.single().enabled)
         assertEquals(listOf(candidate), f.store().read(f.source)!!.pauseCandidates)
+    }
+
+    @Test fun mediaSignalsJoinTheAdoptedSessionOnceAndWithinTheRecording() {
+        val f = fixture()
+        val events = mutableListOf<Event>()
+        val engine = EditingEngine("signal-session", EventSink { events += it })
+        val live = Silence("pause", 16_000, 48_000, VoiceActivitySource.SILERO)
+        engine.submit(0, Change.CaptureRequested(f.source.name, SessionMode.ASSISTED, null, 7), ClockDomain.CAPTURE_ESTIMATE)
+        engine.submit(0, Change.CaptureStarted, ClockDomain.CAPTURE_ESTIMATE)
+        engine.submit(live.endSample, Change.SignalObserved(live), ClockDomain.RECOGNIZER)
+        engine.submit(160_000, Change.SourceFinalized(recordingFingerprint(f.source), 160_000, VideoAnchor(0, 0)))
+        assertNull(f.store().session(f.source))
+        f.store().adoptCapture(f.source, events)
+
+        val confirmed = live.copy(startSample = 17_000, endSample = 47_000)
+        val late = Silence("late", 150_000, 170_000, VoiceActivitySource.WEBRTC)
+        assertEquals(1, f.store().saveSignals(f.source, listOf(confirmed, late)))
+        assertEquals(0, f.store().saveSignals(f.source, listOf(confirmed)))
+
+        val session = f.store().session(f.source)!!
+        assertEquals(SessionMode.ASSISTED, session.header.mode)
+        assertEquals(listOf(live), session.signals<Silence>(ClockDomain.RECOGNIZER))
+        assertEquals(listOf(confirmed), session.signals<Silence>(ClockDomain.MEDIA))
+    }
+
+    @Test fun legacyImportedRecordingsHaveNoSession() {
+        val f = fixture()
+        f.store().saveCaptions(f.source, listOf(CaptionSegment(0, 1_000, "hello")))
+        assertNull(f.store().session(f.source))
     }
 
     private fun captureHistory(f: Fixture, sessionId: String): List<Event> {

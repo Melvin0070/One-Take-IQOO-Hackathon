@@ -143,8 +143,17 @@ fun SessionSignal.key(clock: ClockDomain): String = "${this::class.simpleName}:$
 /** A signal together with the clock and journal position it was recorded at. */
 data class ObservedSignal(
     val sequence: Long,
+    val sample: Long,
     val clock: ClockDomain,
     val signal: SessionSignal,
+)
+
+/** One script progress transition, in the order it was journaled. */
+data class ObservedScriptProgress(
+    val sequence: Long,
+    val sample: Long,
+    val clock: ClockDomain,
+    val progress: ScriptProgress,
 )
 
 /** A recording session reconstructed from its journal. */
@@ -156,16 +165,18 @@ data class RecordingSessionSnapshot(
     val sourceId: String?,
     val durationSamples: Long?,
     val scriptProgress: ScriptProgress?,
+    val scriptProgressHistory: List<ObservedScriptProgress>,
     val signals: List<ObservedSignal>,
 ) {
-    inline fun <reified T : SessionSignal> signals(clock: ClockDomain? = null): List<T> =
-        signals.filter { clock == null || it.clock == clock }.map { it.signal }.filterIsInstance<T>()
+    /** Clock is required: live and media copies of the same signal must never be mixed. */
+    inline fun <reified T : SessionSignal> signals(clock: ClockDomain): List<T> =
+        signals.filter { it.clock == clock }.map { it.signal }.filterIsInstance<T>()
 }
 
 object RecordingSessionReader {
     /**
-     * Folds a validated event history. Events this reader does not know are skipped, so a newer
-     * event type never breaks an older reader.
+     * Folds a validated event history. Only the changes it needs are inspected, so adding a
+     * change or signal kind does not require touching this reader.
      */
     fun read(history: List<Event>): RecordingSessionSnapshot {
         val first = history.firstOrNull() ?: throw IllegalArgumentException("Session history is empty")
@@ -173,7 +184,12 @@ object RecordingSessionReader {
             ?: throw IllegalArgumentException("Session history must begin with a capture request")
         val state = EditingEngine(first.sessionId, history = history).snapshot()
         val signals = history.mapNotNull { event ->
-            (event.change as? Change.SignalObserved)?.let { ObservedSignal(event.sequence, event.clock, it.signal) }
+            (event.change as? Change.SignalObserved)?.let { ObservedSignal(event.sequence, event.sample, event.clock, it.signal) }
+        }
+        val progress = history.mapNotNull { event ->
+            (event.change as? Change.ScriptProgressObserved)?.let {
+                ObservedScriptProgress(event.sequence, event.sample, event.clock, it.progress.frozen())
+            }
         }
         return RecordingSessionSnapshot(
             sessionId = first.sessionId,
@@ -182,6 +198,7 @@ object RecordingSessionReader {
             sourceId = state.sourceId,
             durationSamples = state.durationSamples.takeIf { state.sourceId != null },
             scriptProgress = state.scriptProgress,
+            scriptProgressHistory = Collections.unmodifiableList(progress),
             signals = Collections.unmodifiableList(signals),
         )
     }

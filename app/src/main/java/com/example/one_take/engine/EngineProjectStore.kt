@@ -83,6 +83,30 @@ internal class EngineProjectStore internal constructor(
         edits.write(source, enriched)
     }
 
+    /**
+     * Appends media-confirmed signals to the adopted project history, which is authoritative after
+     * finalization. Already-recorded ids and spans past the recording are skipped; returns the count saved.
+     */
+    @Synchronized fun saveSignals(source: File, signals: List<SessionSignal>): Int = synchronized(importLock) {
+        val engine = open(source)
+        signals.count { signal ->
+            val state = engine.snapshot()
+            val accepted = signal.key(ClockDomain.MEDIA) !in state.signalKeys && signal.endSample <= state.durationSamples
+            if (accepted) engine.submit(signal.endSample, Change.SignalObserved(signal), ClockDomain.MEDIA)
+            accepted
+        }
+    }
+
+    /** The recording session adopted for [source], or null for media recorded without a capture header. */
+    @Synchronized fun session(source: File): RecordingSessionSnapshot? = synchronized(importLock) {
+        if (!source.isFile) return null
+        val ledger = File(directory, "${pathKey(source)}-${recordingFingerprint(source)}.ledger")
+        if (!ledger.isFile) return null
+        val history = readHistory(ledger)
+        if (history.firstOrNull()?.change !is Change.CaptureRequested) return null
+        RecordingSessionReader.read(history)
+    }
+
     /** Rebuild pending suggestions after caption correction, including recovery between journal writes. */
     private fun refreshSpeechSuggestions(engine: EditingEngine, source: File) {
         val state = engine.snapshot()

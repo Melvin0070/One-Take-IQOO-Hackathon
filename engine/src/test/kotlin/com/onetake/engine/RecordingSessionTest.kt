@@ -39,7 +39,28 @@ class RecordingSessionTest {
         assertEquals(listOf(ClockDomain.RECOGNIZER, ClockDomain.RECOGNIZER, ClockDomain.RECOGNIZER,
             ClockDomain.CAPTURE_ESTIMATE, ClockDomain.RECOGNIZER, ClockDomain.MEDIA), read.signals.map { it.clock })
         assertEquals(listOf(17_000L), read.signals<Silence>(ClockDomain.MEDIA).map { it.startSample })
-        assertEquals(1, read.signals<Filler>().size)
+        assertEquals(1, read.signals<Filler>(ClockDomain.RECOGNIZER).size)
+        assertTrue(read.signals<Filler>(ClockDomain.MEDIA).isEmpty())
+    }
+
+    @Test fun readerKeepsEveryScriptProgressTransitionWithItsTiming() {
+        val events = mutableListOf<Event>()
+        val engine = EditingEngine("session", { events += it })
+        engine.submit(0, Change.CaptureRequested("take.mp4", SessionMode.SCRIPT, "One line. Two line.", 1), ClockDomain.CAPTURE_ESTIMATE)
+        engine.submit(0, Change.CaptureStarted, ClockDomain.CAPTURE_ESTIMATE)
+        val matcher = FuzzyScriptMatcher("Beautiful mountains surround the sparkling lake beside our quiet village.",
+            RecordingSession { sample, change, clock -> engine.submit(sample, change, clock) })
+        matcher.consume(ScriptTranscript("a", "Beautiful mountains surround the sparkling lake beside our quiet village", 32_000, 8_000))
+        matcher.consume(ScriptTranscript("b", "Beautiful mountains surround the sparkling lake beside our quiet village", 64_000, 40_000))
+
+        val read = RecordingSessionReader.read(events)
+        assertEquals(listOf(ScriptProgressReason.INITIAL, ScriptProgressReason.TRANSCRIPT, ScriptProgressReason.TRANSCRIPT),
+            read.scriptProgressHistory.map { it.progress.reason })
+        assertEquals(listOf(0L, 32_000L, 64_000L), read.scriptProgressHistory.map { it.sample })
+        assertEquals(read.scriptProgress, read.scriptProgressHistory.last().progress)
+        val take = read.signals<TakeAttempt>(ClockDomain.RECOGNIZER).single()
+        assertEquals(40_000L to 64_000L, take.startSample to take.endSample)
+        assertEquals(64_000L, read.signals.single().sample)
     }
 
     @Test fun liveSignalsRequireAnActiveCaptureAndTheirOwnClock() {

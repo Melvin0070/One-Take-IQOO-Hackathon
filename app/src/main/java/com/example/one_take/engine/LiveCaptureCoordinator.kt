@@ -111,6 +111,7 @@ internal class LiveCaptureCoordinator private constructor(context: Context) {
 
     fun scriptEvent(session: String, sample: Long, change: Change, clock: ClockDomain) {
         require(change is Change.ScriptProgressObserved || change is Change.SignalObserved)
+        if (change is Change.SignalObserved) return signal(session, change.signal, clock)
         scope.launch { guarded {
             if (session !in active) return@guarded
             if (store.snapshot(session).phase in runningPhases) store.append(session, sample, change, clock)
@@ -124,8 +125,9 @@ internal class LiveCaptureCoordinator private constructor(context: Context) {
     fun signal(session: String, signal: SessionSignal, clock: ClockDomain = signal.liveClock) {
         scope.launch { guarded {
             val state = store.snapshot(session)
-            val accepting = if (clock == ClockDomain.MEDIA) state.phase == SessionPhase.READY
-                else session in active && state.captureStarted && state.phase in runningPhases
+            val accepting = if (clock == ClockDomain.MEDIA) {
+                state.phase == SessionPhase.READY && signal.endSample <= state.durationSamples
+            } else session in active && state.captureStarted && state.phase in runningPhases
             if (accepting && signal.key(clock) !in state.signalKeys) {
                 store.append(session, signal.endSample, Change.SignalObserved(signal), clock)
             }
