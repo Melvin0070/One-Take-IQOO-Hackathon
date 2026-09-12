@@ -12,9 +12,13 @@ Live window offsets and saved-media alignment must shift word timing alongside c
 Invalid, uncertain, or stale word evidence cannot produce a cut.
 Legacy captions without word evidence remain readable but do not produce word-level suggestions.
 
-The pure Kotlin engine detects a small filler allowlist, adjacent repeated words, and repeated short prefixes.
+The pure Kotlin engine detects fillers, adjacent repeated words, and repeated short prefixes.
 It proposes removal of the earlier repetition while retaining its replacement.
-Ordinary lexical words such as “like”, “so”, and Hindi “hum” are not filler triggers.
+Fillers come from the English `FillerLexicon`, which `LiveFillerTracker` also runs on committed live segments, so both paths find the same fillers in the same words.
+Hesitation sounds (“um”, “uh”, “erm”, “hmm”, and stretched spellings) always count.
+“like”, “so”, “basically”, and “you know” count only when a pause or hesitation sets them off on both sides; the end of the transcript is not a pause.
+Hindi “hum” and fillers inside other words never count.
+Review may present a filler that is part of a repetition as the repetition instead.
 A repetition may be intentional emphasis; recognition confidence measures the recognized words, not the probability that removing them improves the take.
 Review and explicit Apply are required.
 

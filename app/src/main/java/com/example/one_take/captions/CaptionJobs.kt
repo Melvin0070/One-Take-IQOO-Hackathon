@@ -7,6 +7,8 @@ import com.example.one_take.VideoStore
 import com.example.one_take.editing.EditDecision
 import com.example.one_take.editing.EditRepository
 import com.example.one_take.editing.LivePauseReconciler
+import com.example.one_take.editing.PauseAnalysis
+import com.example.one_take.editing.analyzePauseActivity
 import com.example.one_take.editing.analyzePauses
 import com.example.one_take.editing.mergeDetectedPauses
 import com.example.one_take.vision.FaceTrackRepository
@@ -14,6 +16,7 @@ import com.example.one_take.engine.EngineProjectStore
 import com.example.one_take.engine.LiveCaptureCoordinator
 import com.example.one_take.engine.toApp
 import com.example.one_take.features.CaptionFeatureStore
+import com.onetake.engine.SessionPhase
 import java.io.File
 import kotlinx.coroutines.*
 
@@ -67,7 +70,7 @@ internal class CaptionJobs private constructor(context: Context) {
     val liveActive get() = liveCaptionsEnabled && live != null
 
     /** Start before CameraX so its original recording retains microphone priority. */
-    fun startLive(onScriptSegments: ((List<CaptionSegment>) -> Unit)? = null, engineSession: () -> String? = { null }): Boolean {
+    fun startLive(onCommittedSegments: ((List<CaptionSegment>) -> Unit)? = null, engineSession: () -> String? = { null }): Boolean {
         if (busy) return false
         usedLiveCaptions = false
         liveWindowCount = 0
@@ -89,9 +92,10 @@ internal class CaptionJobs private constructor(context: Context) {
             LiveMicrophone(app) {
                 engineSession()?.let { id ->
                     val snapshot = session.microphone.pauseCandidates()
+                    val source = session.microphone.voiceActivitySource
                     scope.launch(Dispatchers.Default) {
                         runCatching {
-                            LiveCaptureCoordinator.get(app).drainPauseCandidates(id, snapshot)
+                            LiveCaptureCoordinator.get(app).drainPauseCandidates(id, snapshot, source)
                         }
                     }
                 }
@@ -105,7 +109,7 @@ internal class CaptionJobs private constructor(context: Context) {
         liveCaptionsEnabled = captionsEnabled
         val resultFile = CompletableDeferred<File>()
         finalized = resultFile
-        val finishedScript = onScriptSegments?.let { CompletableDeferred<Unit>() }
+        val finishedScript = onCommittedSegments?.let { CompletableDeferred<Unit>() }
         scriptDrain = finishedScript
         sourcePath = null
         error = null
@@ -128,7 +132,7 @@ internal class CaptionJobs private constructor(context: Context) {
                         withContext(Dispatchers.Main.immediate) {
                             liveText = segments.lastOrNull()?.text
                             liveSegments = segments.toList()
-                            onScriptSegments?.invoke(segments)
+                            onCommittedSegments?.invoke(segments)
                             engineSession()?.let { LiveCaptureCoordinator.get(app).transcript(it, segments) }
                             liveWindowCount = session.completedWindows
                         }
@@ -148,8 +152,8 @@ internal class CaptionJobs private constructor(context: Context) {
                     operation = "transcribe"
                 }
                 val reference = referenceAudio?.await() ?: AudioDecoder.decodeMono16k(source)
-                val confirmed = withContext(Dispatchers.Default) { analyzePauses(source, reference, app) }
-                val edits = reconcileLivePauses(source, reference, session, confirmed)
+                val analysis = withContext(Dispatchers.Default) { analyzePauseActivity(source, reference, app) }
+                val edits = reconcileLivePauses(source, reference, session, analysis)
                 if (captionsEnabled) {
                     val alignmentStarted = SystemClock.elapsedRealtime()
                     val aligned = withContext(Dispatchers.Default) { session.reconcile(reference, provisional) }
@@ -208,17 +212,22 @@ internal class CaptionJobs private constructor(context: Context) {
         source: File,
         reference: FloatArray,
         session: LiveCaptionSession,
-        confirmed: EditDecision,
+        analysis: PauseAnalysis,
     ): EditDecision {
         val offset = withContext(Dispatchers.Default) { session.pauseOffsetMs(reference) }
-        val candidates = withContext(Dispatchers.IO) {
-            // The project ledger is the durable source of truth.  A callback that was still
-            // queued when the microphone stopped must not silently become a local-only edit.
-            projects.read(source)?.pauseCandidates.orEmpty()
+        // The project ledger is the durable source of truth.  A callback that was still
+        // queued when the microphone stopped must not silently become a local-only edit.
+        val project = withContext(Dispatchers.IO) { projects.read(source) }
+        val edits = withContext(Dispatchers.Default) {
+            LivePauseReconciler.reconcile(project?.pauseCandidates.orEmpty(), offset, analysis.decision)
         }
-        return withContext(Dispatchers.Default) {
-            LivePauseReconciler.reconcile(candidates, offset, confirmed)
+        if (project?.captureRequested == true && project.phase == SessionPhase.READY) {
+            // Confirmed pauses are session evidence rather than edits, so they are recorded even
+            // when an existing edit plan preserves the user's decisions.
+            val silences = LivePauseReconciler.mediaSilences(edits, project.durationSamples, analysis.source)
+            withContext(Dispatchers.IO) { projects.saveSignals(source, silences) }
         }
+        return edits
     }
 
     /**
@@ -240,7 +249,7 @@ internal class CaptionJobs private constructor(context: Context) {
         }
         session.microphone.stop()
         session.microphone.awaitStopped()
-        // Script events must reach the existing ledger before SourceFinalized closes it.
+        // Transcript and script events must reach the existing ledger before SourceFinalized closes it.
         // This waits only for recognition, not the caption job that awaits the finalized file.
         pendingScript?.await()
         if (pendingScript != null) LiveCaptureCoordinator.get(app).flush()
@@ -253,7 +262,7 @@ internal class CaptionJobs private constructor(context: Context) {
             // recognizer candidates so a pre-start candidate is never mistaken for an active
             // capture or silently raced by SourceFinalized.
             coordinator.flush()
-            coordinator.drainPauseCandidates(sessionId, candidates)
+            coordinator.drainPauseCandidates(sessionId, candidates, session.microphone.voiceActivitySource)
             coordinator.flush()
         }
     }

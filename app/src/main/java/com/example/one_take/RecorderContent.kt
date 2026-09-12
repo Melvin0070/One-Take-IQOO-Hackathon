@@ -1,7 +1,12 @@
 package com.example.one_take
 
+import com.example.one_take.analysis.REVIEW_SCREEN_AFTER_RECORDING
+import com.example.one_take.analysis.RecordingAnalysisHandoff
 import com.example.one_take.captions.CaptionJobs
 import com.example.one_take.engine.LiveCaptureCoordinator
+import com.example.one_take.engine.LiveSessionPipeline
+import com.example.one_take.engine.LiveSessionSink
+import com.example.one_take.engine.toSession
 import com.example.one_take.features.CaptionFeatureStore
 import com.example.one_take.features.FeatureMarketplaceScreen
 import android.os.SystemClock
@@ -37,6 +42,7 @@ internal fun VideoRecorderApp() {
     val features = remember { CaptionFeatureStore.get(context) }
     val captionJobs = remember { CaptionJobs.get(context) }
     val liveEngine = remember { LiveCaptureCoordinator.get(context) }
+    val analysis = remember { RecordingAnalysisHandoff.get(context) }
     var featureReturn by rememberSaveable { mutableStateOf(AppScreen.Camera) }
     val store = recorder.videoStore
     val projectCatalog = remember { ProjectCatalog(context.applicationContext) }
@@ -47,20 +53,11 @@ internal fun VideoRecorderApp() {
     val setup = remember { RecordingSetupStore(context) }
     // Keep potentially long scripts out of the saved-instance-state Binder bundle.
     var script by remember { mutableStateOf(setup.script) }
-    val scriptSession = remember(recorder, liveEngine) {
-        com.onetake.engine.RecordingSession { sample, change, clock ->
-            recorder.activeEngineSessionId?.let { liveEngine.scriptEvent(it, sample, change, clock) }
-        }
-    }
-    fun newScriptController() = script.takeIf { mode == RecordingMode.Script && it.isNotBlank() }
-        ?.let { ScriptCaptureController(it, scriptSession) }
-    var scriptController by remember(mode, script) { mutableStateOf(newScriptController()) }
-    LaunchedEffect(recorder.activeEngineSessionId) {
-        recorder.activeEngineSessionId?.let { id -> scriptController?.let {
-            liveEngine.scriptEvent(id, 0, com.onetake.engine.Change.ScriptProgressObserved(it.progress.copy(reason = com.onetake.engine.ScriptProgressReason.INITIAL)),
-                com.onetake.engine.ClockDomain.CAPTURE_ESTIMATE)
-        } }
-    }
+    val sessionSink = remember(liveEngine) { LiveSessionSink.of(liveEngine) }
+    fun newLivePipeline() = LiveSessionPipeline(mode.toSession(), script, sessionSink)
+    // Replaced on every start so each take owns its session, matcher and detectors.
+    var livePipeline by remember(mode, script) { mutableStateOf(newLivePipeline()) }
+    val scriptController = livePipeline.scriptController
     var libraryReturn by rememberSaveable { mutableStateOf(AppScreen.Home) }
     var lensFacing by rememberSaveable { mutableIntStateOf(CameraSelector.LENS_FACING_BACK) }
     val captureState = recorder.captureState
@@ -101,14 +98,18 @@ internal fun VideoRecorderApp() {
             override fun onCameraReady() { cameraReady = true; cameraError = null }
             override fun onCameraError(message: String) { cameraReady = false; cameraError = message }
             override fun onRecordingFinalized(file: File) {
-                reviewPath = file.absolutePath
-                reviewProjectId = null
-                reviewingSaved = false
-                screen = AppScreen.Review
+                if (REVIEW_SCREEN_AFTER_RECORDING) {
+                    reviewPath = file.absolutePath
+                    reviewProjectId = null
+                    reviewingSaved = false
+                    screen = AppScreen.Review
+                }
                 if (!captionJobs.finishLive(file)) {
                     if (features.installed && features.enabled) captionJobs.generate(file, autoExport = true)
                     else captionJobs.detectCuts(file)
                 }
+                // Fingerprinting the source can take seconds, so ReviewScreen must not wait on it.
+                scope.launch { analysis.run(file) }
             }
             override fun onRecordingError(message: String) { captionJobs.abortLive(); scope.launch { snackbar.showSnackbar(message) } }
         })
@@ -199,11 +200,10 @@ internal fun VideoRecorderApp() {
                     },
                     onStart = {
                         if (!captionJobs.busy) {
-                            scriptController = newScriptController()
-                            val captureScript = scriptController
-                            captionJobs.startLive(onScriptSegments = captureScript?.let { controller -> { segments -> controller.consume(segments) } }) { recorder.activeEngineSessionId }
+                            val take = newLivePipeline().also { livePipeline = it }
+                            captionJobs.startLive(onCommittedSegments = take::onCommittedSegments) { recorder.activeEngineSessionId }
                             recorder.setFinalizationBarrier(captionJobs.captureFinalizationBarrier())
-                            if (!recorder.startRecording()) captionJobs.abortLive()
+                            if (!recorder.startRecording(take)) captionJobs.abortLive()
                         }
                     }, onStop = {
                         captionJobs.noteStopRequested()

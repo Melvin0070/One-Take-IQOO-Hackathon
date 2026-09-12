@@ -48,8 +48,8 @@ internal class LiveCaptureCoordinator private constructor(context: Context) {
     }
 
     /** Returns only after the requested event is durable, before CameraX may start. */
-    suspend fun begin(source: File): String = withContext(dispatcher) {
-        val session = store.begin(source.name)
+    suspend fun begin(source: File, mode: SessionMode = SessionMode.ASSISTED, script: String? = null): String = withContext(dispatcher) {
+        val session = store.begin(source.name, mode, script, System.currentTimeMillis())
         active[session] = ActiveClock(SystemClock.elapsedRealtime())
         withContext(Dispatchers.Main) { pauseCounts = emptyMap() }
         session
@@ -110,12 +110,31 @@ internal class LiveCaptureCoordinator private constructor(context: Context) {
     }
 
     fun scriptEvent(session: String, sample: Long, change: Change, clock: ClockDomain) {
-        require(change is Change.ScriptProgressObserved || change is Change.TakeAttemptObserved)
+        require(change is Change.ScriptProgressObserved || change is Change.SignalObserved)
+        if (change is Change.SignalObserved) return signal(session, change.signal, clock)
         scope.launch { guarded {
             if (session !in active) return@guarded
             if (store.snapshot(session).phase in runningPhases) store.append(session, sample, change, clock)
         } }
     }
+
+    /**
+     * Records a live signal in its own clock, or a media-confirmed one once the source is READY.
+     * Redelivery of the same signal id is ignored rather than surfaced as a history failure.
+     */
+    fun signal(session: String, signal: SessionSignal, clock: ClockDomain = signal.liveClock) {
+        scope.launch { guarded {
+            val state = store.snapshot(session)
+            val accepting = if (clock == ClockDomain.MEDIA) {
+                state.phase == SessionPhase.READY && signal.endSample <= state.durationSamples
+            } else session in active && state.captureStarted && state.phase in runningPhases
+            if (accepting && signal.key(clock) !in state.signalKeys) {
+                store.append(session, signal.endSample, Change.SignalObserved(signal), clock)
+            }
+        } }
+    }
+
+    suspend fun session(session: String): RecordingSessionSnapshot = withContext(dispatcher) { store.session(session) }
 
     /** Unreconciled ASR stays in its own clock domain and never changes final captions. */
     fun transcript(session: String, segments: List<CaptionSegment>) {
@@ -132,12 +151,12 @@ internal class LiveCaptureCoordinator private constructor(context: Context) {
     }
 
     /** Candidate timing remains in microphone units until saved audio confirms it. */
-    fun pauseCandidate(session: String, candidate: PauseCandidate) {
-        scope.launch { guarded { appendPauseCandidate(session, candidate) } }
+    fun pauseCandidate(session: String, candidate: PauseCandidate, source: VoiceActivitySource? = null) {
+        scope.launch { guarded { appendPauseCandidate(session, candidate, source) } }
     }
 
     /** Durably submits the complete detector snapshot before source finalization. */
-    suspend fun drainPauseCandidates(session: String, candidates: List<PauseCandidate>) =
+    suspend fun drainPauseCandidates(session: String, candidates: List<PauseCandidate>, source: VoiceActivitySource? = null) =
         withContext(dispatcher) {
             if (session !in active) return@withContext
             val state = store.snapshot(session)
@@ -148,17 +167,23 @@ internal class LiveCaptureCoordinator private constructor(context: Context) {
             if (!state.captureStarted) return@withContext
             candidates
                 .distinctBy(PauseCandidate::id)
-                .forEach { appendPauseCandidate(session, it) }
+                .forEach { appendPauseCandidate(session, it, source) }
         }
 
-    private suspend fun appendPauseCandidate(session: String, candidate: PauseCandidate) {
+    private suspend fun appendPauseCandidate(session: String, candidate: PauseCandidate, source: VoiceActivitySource?) {
         if (session !in active) return
         val state = store.snapshot(session)
         if (!state.captureStarted || state.phase !in runningPhases) return
-        if (state.pauseCandidates.any { it.id == candidate.id }) return
-        store.append(session, candidate.endSample, Change.PauseCandidateObserved(candidate), ClockDomain.RECOGNIZER)
-        withContext(Dispatchers.Main) {
-            pauseCounts = pauseCounts + (session to state.pauseCandidates.size + 1)
+        if (state.pauseCandidates.none { it.id == candidate.id }) {
+            store.append(session, candidate.endSample, Change.PauseCandidateObserved(candidate), ClockDomain.RECOGNIZER)
+            withContext(Dispatchers.Main) {
+                pauseCounts = pauseCounts + (session to state.pauseCandidates.size + 1)
+            }
+        }
+        // Checked apart from the candidate so a replayed snapshot repairs a Silence whose append failed.
+        val silence = source?.let(candidate::toSilence) ?: return
+        if (silence.key(ClockDomain.RECOGNIZER) !in state.signalKeys) {
+            store.append(session, silence.endSample, Change.SignalObserved(silence), ClockDomain.RECOGNIZER)
         }
     }
 

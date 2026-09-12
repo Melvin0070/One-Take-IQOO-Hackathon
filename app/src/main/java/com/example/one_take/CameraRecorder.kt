@@ -35,6 +35,8 @@ import com.example.one_take.vision.FaceSample
 import com.example.one_take.vision.FaceTrackRepository
 import com.example.one_take.vision.FaceTracker
 import com.example.one_take.engine.LiveCaptureCoordinator
+import com.example.one_take.engine.LiveSessionPipeline
+import com.onetake.engine.SessionMode
 import java.io.File
 import java.io.IOException
 import java.util.IdentityHashMap
@@ -131,6 +133,7 @@ internal class CameraRecorder(private val context: Context) {
     private val engineSessions = IdentityHashMap<VideoStore.PendingRecording, String>()
     private var beginGeneration = 0L
     private var activePending: VideoStore.PendingRecording? = null
+    private var livePipeline: LiveSessionPipeline? = null
     private val faceSamples = ArrayList<FaceSample>()
     private var faceSampleSource: File? = null
     private var released = false
@@ -262,7 +265,8 @@ internal class CameraRecorder(private val context: Context) {
         return true
     }
 
-    fun startRecording(): Boolean {
+    /** [live] supplies the session mode and script and receives this take's live observations. */
+    fun startRecording(live: LiveSessionPipeline? = null): Boolean {
         if (released || captureState != CaptureUiState.Idle) return false
 
         val capture = videoCapture
@@ -281,6 +285,7 @@ internal class CameraRecorder(private val context: Context) {
         pendingRecording = pending
         beginPending = pending
         pendingFinalizationBarrier = finalizationBarrier
+        livePipeline = live
         val generation = ++beginGeneration
         faceSampleSource = pending.outputFile
         faceSamples.clear()
@@ -294,7 +299,7 @@ internal class CameraRecorder(private val context: Context) {
         // re-check the pending recording identity before starting CameraX.
         finalizeScope.launch {
             val sessionId = try {
-                captureCoordinator.begin(pending.outputFile)
+                captureCoordinator.begin(pending.outputFile, live?.mode ?: SessionMode.ASSISTED, live?.script)
             } catch (exception: Exception) {
                 Log.e(TAG, "Unable to begin capture engine session", exception)
                 null
@@ -322,6 +327,7 @@ internal class CameraRecorder(private val context: Context) {
                 engineSessions[pending] = sessionId
                 activePending = pending
                 activeEngineSessionId = sessionId
+                live?.attach(sessionId)
                 startCameraRecording(pending, sessionId, generation, capture)
             }
         }
@@ -671,6 +677,9 @@ internal class CameraRecorder(private val context: Context) {
             } catch (exception: Exception) {
                 Log.e(TAG, "Unable to record vision observation", exception)
             }
+        }
+        if (captureState == CaptureUiState.Recording) {
+            livePipeline?.onFace(observation, recordingStartedAt, SystemClock.elapsedRealtime())
         }
         if (observation == null || captureState != CaptureUiState.Recording) return
 

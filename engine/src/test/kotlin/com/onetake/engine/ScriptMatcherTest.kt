@@ -35,7 +35,7 @@ class ScriptMatcherTest {
         say(matcher, lines[0], "third")
         assertEquals(1, matcher.progress.currentIndex)
         assertEquals(ScriptChunkState.REPEATED, matcher.progress.chunks[0].state)
-        assertEquals(listOf(2, 3), events.filterIsInstance<Change.TakeAttemptObserved>().map { it.attempt.attempt })
+        assertEquals(listOf(2, 3), events.filterIsInstance<Change.SignalObserved>().map { (it.signal as TakeAttempt).attemptIndex })
     }
     @Test fun offScriptSpeechStaysPending() {
         val matcher = FuzzyScriptMatcher(lines[0])
@@ -85,7 +85,7 @@ class ScriptMatcherTest {
         engine.submit(16000, Change.SourceFinalized("source", 16000, VideoAnchor(0, 0)))
         assertEquals(matcher.progress, engine.snapshot().scriptProgress)
         assertEquals(engine.snapshot(), EditingEngine("script", history = history).snapshot())
-        assertEquals(1, engine.snapshot().takeAttempts.size)
+        assertEquals(1, engine.snapshot().signalKeys.size)
     }
     @Test fun twoHundredChunksUnderFiveMillisecondsPerSegment() {
         val script = (0 until 200).joinToString("\n") { index ->

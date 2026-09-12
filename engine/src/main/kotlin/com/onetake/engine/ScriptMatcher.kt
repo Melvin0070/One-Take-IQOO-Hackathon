@@ -4,11 +4,6 @@ import java.security.MessageDigest
 import java.util.Collections
 import java.util.Locale
 
-/** Minimal live-event boundary until the complete #45 session header/reader lands. */
-fun interface RecordingSession {
-    fun record(sample: Long, change: Change, clock: ClockDomain)
-}
-
 enum class ScriptChunkState { PENDING, COVERED, SKIPPED, MISMATCHED, REPEATED }
 enum class ScriptProgressReason { INITIAL, TRANSCRIPT, MANUAL_NEXT, MANUAL_PREVIOUS }
 data class ScriptChunk(val id: String, val text: String)
@@ -22,12 +17,9 @@ data class ScriptProgress(val chunks: List<ChunkCoverage>, val currentIndex: Int
     val complete: Boolean get() = currentIndex == chunks.size
     fun frozen(): ScriptProgress = copy(chunks = Collections.unmodifiableList(chunks.toList()))
 }
-data class TakeAttempt(val chunkId: String, val attempt: Int, val segmentId: String) {
-    init { require(chunkId.isNotBlank() && segmentId.isNotBlank() && attempt >= 2) }
-}
 /** A committed segment, in recognizer sample units, not finalized media time. */
-data class ScriptTranscript(val id: String, val text: String, val endSample: Long) {
-    init { require(id.isNotBlank()); require(endSample >= 0) }
+data class ScriptTranscript(val id: String, val text: String, val endSample: Long, val startSample: Long = endSample) {
+    init { require(id.isNotBlank()); require(startSample in 0..endSample) }
 }
 interface ScriptMatcher {
     val progress: ScriptProgress
@@ -103,7 +95,7 @@ class FuzzyScriptMatcher(
                 val old = entries[repeat.first]
                 entries[repeat.first] = old.copy(state = ScriptChunkState.REPEATED, coverage = repeat.second.score, attempts = old.attempts + 1)
                 publish(entries, current, ScriptProgressReason.TRANSCRIPT, segment.endSample)
-                session.record(segment.endSample, Change.TakeAttemptObserved(TakeAttempt(old.chunk.id, old.attempts + 1, segment.id)), ClockDomain.RECOGNIZER)
+                session.signal(attempt(old, segment))
                 pending = emptyList()
                 spoken = spoken.drop(repeat.second.last + 1)
                 allowRepeat = false
@@ -119,8 +111,7 @@ class FuzzyScriptMatcher(
                 entries[index] = old.copy(state = if (old.attempts > 0) ScriptChunkState.REPEATED else ScriptChunkState.COVERED,
                     coverage = forward.second.score, attempts = old.attempts + 1)
                 publish(entries, index + 1, ScriptProgressReason.TRANSCRIPT, segment.endSample)
-                if (old.attempts > 0) session.record(segment.endSample,
-                    Change.TakeAttemptObserved(TakeAttempt(old.chunk.id, old.attempts + 1, segment.id)), ClockDomain.RECOGNIZER)
+                if (old.attempts > 0) session.signal(attempt(old, segment))
                 val consumed = forward.second.last + 1 - if (index == current) combined.size - spoken.size else 0
                 spoken = spoken.drop(consumed.coerceAtLeast(1))
                 pending = emptyList()
@@ -162,6 +153,9 @@ class FuzzyScriptMatcher(
             if (reason == ScriptProgressReason.TRANSCRIPT) ClockDomain.RECOGNIZER else ClockDomain.CAPTURE_ESTIMATE)
         progress = updated
     }
+
+    private fun attempt(chunk: ChunkCoverage, segment: ScriptTranscript) = TakeAttempt(
+        "${chunk.chunk.id}#${chunk.attempts + 1}", chunk.chunk.id, chunk.attempts + 1, segment.startSample, segment.endSample)
 
     private data class Match(val score: Double, val last: Int)
     private fun match(script: List<String>, spoken: List<String>): Match {
