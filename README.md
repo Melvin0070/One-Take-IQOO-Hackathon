@@ -11,7 +11,8 @@ Metric availability depends on the connected phone; GPU and NPU utilization requ
 
 ## Project structure
 
-- `engine/` is a pure Kotlin JVM module for session state, sample-based time, reversible edits, and deterministic event replay.
+- `engine/` is a pure Kotlin JVM module for session state, sample-based time, reversible edits, deterministic event replay, and inference backend policy.
+- `engine-android/` contains Android runtime integration, including the iQOO 15 QNN/HTP capability probe.
 - `app/.../engine/` adapts existing caption/cut metadata to the engine and persists checksummed event journals.
 - `MainActivity.kt` starts the Compose interface.
 - `RecorderContent.kt` coordinates navigation and screen state.
@@ -92,7 +93,9 @@ Destroying the Activity during an unfinished recording stops live inference; the
 Existing recordings also have a Generate captions action.
 Removing the model frees its storage without deleting videos or saved caption text.
 
-This prototype runs Whisper on the CPU, not the NPU.
+Whisper, Silero, and face tracking currently execute on CPU.
+The [iQOO 15 inference framework](docs/iqoo15-inference.md) prefers validated NPU adapters, reports CPU fallback explicitly, and provides strict NPU validation.
+Compatible production NPU artifacts are not yet integrated; successful QNN runtime initialization alone does not accelerate these models.
 Processing time and transcription accuracy depend on the phone, language, and recording quality.
 Keep the app open while processing; jobs survive screen navigation but do not resume after process termination.
 Videos longer than 120 seconds are currently rejected by the caption decoder.
