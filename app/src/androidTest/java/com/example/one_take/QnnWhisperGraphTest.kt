@@ -21,11 +21,18 @@ import java.security.MessageDigest
 import org.junit.Assert.*
 import org.junit.Assume.assumeTrue
 import org.junit.Test
+import org.junit.Before
 import org.junit.runner.RunWith
 
 /** Opt-in execution test. Model binaries are local dependencies, never test APK assets. */
 @RunWith(AndroidJUnit4::class)
 class QnnWhisperGraphTest {
+    @Before fun foregroundOptInRun() {
+        if (InstrumentationRegistry.getArguments().getString("requireWhisperGraphs") == "true") {
+            keepQnnTestInForeground()
+        }
+    }
+
     @Test fun encoderAndDecoderExecuteOnHtp() {
         assumeTrue("Requires iQOO 15", Build.VERSION.SDK_INT >= 31 &&
             Build.MODEL == "I2501" && Build.SOC_MODEL == "SM8850")
@@ -133,6 +140,37 @@ class QnnWhisperGraphTest {
         session.close()
         session.close()
         assertThrows(IllegalStateException::class.java) { session.execute(listOf(ByteArray(480_000))) }
+    }
+
+    @Test fun decoderAcceptsFinalContextPosition() {
+        assumeTrue("Requires iQOO 15", Build.VERSION.SDK_INT >= 31 &&
+            Build.MODEL == "I2501" && Build.SOC_MODEL == "SM8850")
+        assumeTrue("Opt in with requireWhisperGraphs=true",
+            InstrumentationRegistry.getArguments().getString("requireWhisperGraphs") == "true")
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val directory = File(context.filesDir, "qnn-whisper-test")
+        val encoderFile = File(directory, "encoder.bin")
+        val decoderFile = File(directory, "decoder.bin")
+        assertHash(encoderFile, "c5722aebdce1621e9cddf832b134461a385018a12eabe519a68fad0bcc752f25")
+        assertHash(decoderFile, "45418a0c81c8964f2d1448e03f5ce35cd01daa4de19269962fd0414547cccccd")
+        QnnGraphSession.open(context, encoderFile).use { encoder ->
+            val outputs = encoder.execute(listOf(ByteArray(480_000)))
+            val cross = encoder.outputs.mapIndexed { index, spec -> spec.name to outputs[index] }.toMap()
+            QnnGraphSession.open(context, decoderFile).use { decoder ->
+                val inputs = decoder.inputs.map { spec ->
+                    when {
+                        spec.name == "input_ids" -> intBytes(50258)
+                        spec.name == "position_ids" -> intBytes(199)
+                        spec.name in cross -> cross.getValue(spec.name)
+                        else -> ByteArray(spec.byteCount)
+                    }
+                }
+                val output = decoder.execute(inputs)
+                val logits = output[decoder.outputs.indexOfFirst { it.name == "logits" }]
+                assertEquals(51865 * 2, logits.size)
+                assertFiniteHalf(logits)
+            }
+        }
     }
 
     private fun intBytes(value: Int) = ByteBuffer.allocate(4).order(ByteOrder.LITTLE_ENDIAN).putInt(value).array()
