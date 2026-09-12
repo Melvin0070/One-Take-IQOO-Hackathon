@@ -151,12 +151,12 @@ internal class LiveCaptureCoordinator private constructor(context: Context) {
     }
 
     /** Candidate timing remains in microphone units until saved audio confirms it. */
-    fun pauseCandidate(session: String, candidate: PauseCandidate) {
-        scope.launch { guarded { appendPauseCandidate(session, candidate) } }
+    fun pauseCandidate(session: String, candidate: PauseCandidate, source: VoiceActivitySource? = null) {
+        scope.launch { guarded { appendPauseCandidate(session, candidate, source) } }
     }
 
     /** Durably submits the complete detector snapshot before source finalization. */
-    suspend fun drainPauseCandidates(session: String, candidates: List<PauseCandidate>) =
+    suspend fun drainPauseCandidates(session: String, candidates: List<PauseCandidate>, source: VoiceActivitySource? = null) =
         withContext(dispatcher) {
             if (session !in active) return@withContext
             val state = store.snapshot(session)
@@ -167,17 +167,23 @@ internal class LiveCaptureCoordinator private constructor(context: Context) {
             if (!state.captureStarted) return@withContext
             candidates
                 .distinctBy(PauseCandidate::id)
-                .forEach { appendPauseCandidate(session, it) }
+                .forEach { appendPauseCandidate(session, it, source) }
         }
 
-    private suspend fun appendPauseCandidate(session: String, candidate: PauseCandidate) {
+    private suspend fun appendPauseCandidate(session: String, candidate: PauseCandidate, source: VoiceActivitySource?) {
         if (session !in active) return
         val state = store.snapshot(session)
         if (!state.captureStarted || state.phase !in runningPhases) return
-        if (state.pauseCandidates.any { it.id == candidate.id }) return
-        store.append(session, candidate.endSample, Change.PauseCandidateObserved(candidate), ClockDomain.RECOGNIZER)
-        withContext(Dispatchers.Main) {
-            pauseCounts = pauseCounts + (session to state.pauseCandidates.size + 1)
+        if (state.pauseCandidates.none { it.id == candidate.id }) {
+            store.append(session, candidate.endSample, Change.PauseCandidateObserved(candidate), ClockDomain.RECOGNIZER)
+            withContext(Dispatchers.Main) {
+                pauseCounts = pauseCounts + (session to state.pauseCandidates.size + 1)
+            }
+        }
+        // Checked apart from the candidate so a replayed snapshot repairs a Silence whose append failed.
+        val silence = source?.let(candidate::toSilence) ?: return
+        if (silence.key(ClockDomain.RECOGNIZER) !in state.signalKeys) {
+            store.append(session, silence.endSample, Change.SignalObserved(silence), ClockDomain.RECOGNIZER)
         }
     }
 

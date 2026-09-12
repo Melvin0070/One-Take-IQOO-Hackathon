@@ -14,3 +14,15 @@ data class PauseCandidate(
         }
     }
 }
+
+/**
+ * The live [Silence] a streaming candidate was derived from, sharing its id.
+ *
+ * Candidates keep [StreamingPauseDetector.PADDING_MILLISECONDS] of quiet beside speech so they are
+ * safe to cut. A Silence reports the observed non-speech interval, so that padding is restored and
+ * the span stays longer than the detector's interior-pause threshold.
+ */
+fun PauseCandidate.toSilence(source: VoiceActivitySource): Silence {
+    val padding = StreamingPauseDetector.PADDING_MILLISECONDS * StreamingPauseDetector.SAMPLE_RATE / 1_000L
+    return Silence(id, (startSample - padding).coerceAtLeast(0L), Math.addExact(endSample, padding), source)
+}

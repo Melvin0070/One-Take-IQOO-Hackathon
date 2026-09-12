@@ -2,6 +2,9 @@ package com.example.one_take.editing
 
 import com.example.one_take.engine.recordingTimeline
 import com.onetake.engine.PauseCandidate
+import com.onetake.engine.Silence
+import com.onetake.engine.StreamingPauseDetector
+import com.onetake.engine.VoiceActivitySource
 
 /**
  * Conservatively promotes streaming pause candidates after saved-audio alignment.
@@ -100,6 +103,26 @@ internal object LivePauseReconciler {
 
         return EditDecision(confirmed.durationMs, cuts)
     }
+
+    /**
+     * MEDIA-clock [Silence] copies of the pause cuts in a final [decision], keyed by cut id so a live
+     * candidate and its confirmed copy share an id.
+     *
+     * Cuts keep speech padding inside the pause; a Silence reports the non-speech interval itself, as
+     * the live copy does, so the padding is restored and bounded by the finalized media.
+     */
+    fun mediaSilences(
+        decision: EditDecision,
+        durationSamples: Long,
+        source: VoiceActivitySource,
+    ): List<Silence> = decision.cuts
+        .filter { it.reason == OFFLINE_SILENCE_REASON || it.reason == LIVE_SILENCE_REASON }
+        .mapNotNull { cut ->
+            val padding = StreamingPauseDetector.PADDING_MILLISECONDS
+            val start = recordingTimeline.samplesFromMillis((cut.startMs - padding).coerceAtLeast(0L))
+            val end = minOf(durationSamples, recordingTimeline.samplesFromMillis(cut.endMs + padding))
+            if (end > start) Silence(cut.id, start, end, source) else null
+        }
 
     private fun mapCandidate(
         candidate: PauseCandidate,
