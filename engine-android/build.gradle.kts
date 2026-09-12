@@ -58,6 +58,7 @@ tasks.named("preBuild").configure { dependsOn(stageQairtRuntime) }
 dependencies {
     api(project(":engine"))
     testImplementation(libs.junit)
+    testImplementation("org.robolectric:robolectric:4.17")
 }
 
 androidComponents {
