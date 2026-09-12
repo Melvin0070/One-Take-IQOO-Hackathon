@@ -438,7 +438,7 @@ class LivePauseFeatureTest {
         const val PAUSE_FIXTURE = "room-pause-test.mp4"
         const val START_RECORDING = "Start recording"
         const val STOP_RECORDING = "Stop recording"
-        const val SAVED_VIDEOS = "Saved videos"
+        const val SAVED_VIDEOS = "Projects"
         const val REVIEW_VIDEO = "Review video"
         const val SAMPLE_RATE = 16_000
         const val UI_WAIT_TIMEOUT = 30_000L

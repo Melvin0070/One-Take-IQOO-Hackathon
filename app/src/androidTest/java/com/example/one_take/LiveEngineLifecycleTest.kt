@@ -201,12 +201,12 @@ class LiveEngineLifecycleTest {
         assertEquals(sourceName, source.name)
         assertPlayableWithAudioAndVideo(source)
 
-        // Opening Saved videos exercises the same recovery path a user sees after
+        // Opening Projects exercises the same recovery path a user sees after
         // Activity recreation, rather than reading the project ledger alone.
         waitForEnabledContentDescription(START_RECORDING)
         compose.onNodeWithContentDescription(SAVED_VIDEOS).performClick()
         waitForText(SAVED_VIDEOS)
-        waitForText(source.name)
+        waitForContentDescription("Play " + source.name)
 
         val adopted = projectStore.read(source)
         assertNotNull("Finalized capture must be adopted into the project ledger", adopted)
@@ -518,7 +518,7 @@ class LiveEngineLifecycleTest {
     private companion object {
         const val START_RECORDING = "Start recording"
         const val STOP_RECORDING = "Stop recording"
-        const val SAVED_VIDEOS = "Saved videos"
+        const val SAVED_VIDEOS = "Projects"
         const val REVIEW_VIDEO = "Review video"
         const val MIN_CAPTURE_MILLIS = 1_500L
         const val UI_WAIT_TIMEOUT = 25_000L

@@ -29,24 +29,24 @@ import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import java.io.File
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 @Composable
 internal fun GalleryVideoCard(
-    file: File,
+    project: ProjectSummary,
     date: String,
-    fileSize: String,
     onOpen: () -> Unit,
     onDelete: () -> Unit
 ) {
+    val file = project.source
     val thumbnail by produceState<Bitmap?>(
         initialValue = null,
         key1 = file.absolutePath,
@@ -66,7 +66,10 @@ internal fun GalleryVideoCard(
     val cardShape = RoundedCornerShape(16.dp)
 
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth()
+            .testTag("project-${file.name}")
+            .semantics { contentDescription = playLabel }
+            .clickable(role = Role.Button, onClick = onOpen),
         shape = cardShape,
         border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = .12f)),
         colors = CardDefaults.cardColors(
@@ -79,9 +82,7 @@ internal fun GalleryVideoCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .aspectRatio(16f / 9f)
-                    .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
-                    .semantics { contentDescription = playLabel }
-                    .clickable(role = Role.Button, onClick = onOpen),
+                    .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)),
                 contentAlignment = Alignment.Center
             ) {
                 val image = thumbnail
@@ -124,20 +125,40 @@ internal fun GalleryVideoCard(
                 ) {
                     Text(text = "▶", color = Color.White, maxLines = 1)
                 }
+                Text(
+                    text = project.durationMs?.let(::formatElapsedTime) ?: stringResource(R.string.project_duration_unavailable),
+                    modifier = Modifier.align(Alignment.BottomEnd).padding(8.dp)
+                        .background(Color.Black.copy(alpha = .75f), RoundedCornerShape(6.dp))
+                        .padding(horizontal = 6.dp, vertical = 3.dp),
+                    color = Color.White,
+                    style = MaterialTheme.typography.labelMedium,
+                )
             }
 
             Column(Modifier.fillMaxWidth().padding(12.dp)) {
                 Text(
-                    text = file.name,
+                    text = project.scriptTitle ?: date,
                     color = Color.White,
                     style = MaterialTheme.typography.titleSmall,
-                    maxLines = 1,
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
                 Row(Modifier.fillMaxWidth().padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                        Text(date, color = Color.White.copy(alpha = .7f), style = MaterialTheme.typography.bodySmall)
-                        Text(fileSize, color = Color.White.copy(alpha = .58f), style = MaterialTheme.typography.bodySmall)
+                        project.mode?.let { mode ->
+                            Text(
+                                text = stringResource(if (mode == RecordingMode.Script) R.string.project_script_mode else R.string.project_assisted_mode),
+                                modifier = Modifier.background(Color.White.copy(alpha = .1f), RoundedCornerShape(6.dp))
+                                    .padding(horizontal = 6.dp, vertical = 3.dp),
+                                color = Color.White.copy(alpha = .85f), style = MaterialTheme.typography.labelSmall,
+                            )
+                        }
+                        if (project.edited == true) {
+                            Text(stringResource(R.string.project_edited), color = Color(0xFFACDFBA), style = MaterialTheme.typography.labelSmall)
+                        }
+                        if (project.detailsUnavailable) {
+                            Text(stringResource(R.string.project_details_unavailable), color = Color.White.copy(alpha = .7f), style = MaterialTheme.typography.bodySmall)
+                        }
                     }
                     IconButton(onClick = onDelete,
                         modifier = Modifier.size(48.dp).semantics { contentDescription = deleteLabel }) {

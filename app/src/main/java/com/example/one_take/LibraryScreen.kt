@@ -1,7 +1,6 @@
 package com.example.one_take
 
 import android.app.Activity
-import android.text.format.Formatter
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -15,17 +14,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
-import java.io.File
 import java.text.DateFormat
 import java.util.Date
 
 @Composable
-internal fun LibraryScreen(
-    videos: List<File>, loading: Boolean, onRecord: () -> Unit,
-    onOpen: (File) -> Unit, onDelete: (File) -> Unit
+internal fun ProjectsScreen(
+    projects: List<ProjectSummary>, loading: Boolean, onRecord: () -> Unit,
+    onOpen: (ProjectSummary) -> Unit, onDelete: (ProjectSummary) -> Unit,
+    loadFailed: Boolean = false, onRetry: () -> Unit = {},
 ) {
     val context = LocalContext.current
 
@@ -43,7 +43,7 @@ internal fun LibraryScreen(
     }
 
     Surface(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier.fillMaxSize().testTag("projects-screen"),
         color = Color.Black,
         contentColor = Color.White
     ) {
@@ -80,6 +80,11 @@ internal fun LibraryScreen(
                 }
             }
 
+            if (loadFailed) {
+                Text(stringResource(R.string.library_error), style = MaterialTheme.typography.bodyMedium)
+                TextButton(onClick = onRetry) { Text(stringResource(R.string.retry_projects)) }
+            }
+
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -94,7 +99,7 @@ internal fun LibraryScreen(
                         )
                     }
 
-                    videos.isEmpty() -> {
+                    projects.isEmpty() && !loadFailed -> {
                         Column(
                             modifier = Modifier
                                 .align(Alignment.Center)
@@ -123,13 +128,12 @@ internal fun LibraryScreen(
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
                             verticalArrangement = Arrangement.spacedBy(14.dp)
                         ) {
-                            items(videos, key = { it.absolutePath }) { file ->
+                            items(projects, key = { it.source.absolutePath }) { project ->
                                 GalleryVideoCard(
-                                    file = file,
-                                    date = DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(file.lastModified())),
-                                    fileSize = Formatter.formatShortFileSize(context, file.length()),
-                                    onOpen = { onOpen(file) },
-                                    onDelete = { onDelete(file) }
+                                    project = project,
+                                    date = DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(project.createdAt)),
+                                    onOpen = { onOpen(project) },
+                                    onDelete = { onDelete(project) }
                                 )
                             }
                         }

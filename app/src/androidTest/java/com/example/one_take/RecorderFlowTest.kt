@@ -7,6 +7,7 @@ import android.os.SystemClock
 import android.view.View
 import android.view.ViewGroup
 import android.widget.VideoView
+import androidx.activity.compose.setContent
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -59,7 +60,9 @@ class RecorderFlowTest {
     fun tearDown() {
         // Stop any active capture before removing only files created by this test.
         runCatching {
-            compose.activityRule.scenario.moveToState(Lifecycle.State.CREATED)
+            // I2501 can freeze background instrumentation during asynchronous cleanup.
+            // Dispose capture in the foreground, as VisualSuggestionsTest already does.
+            compose.runOnUiThread { compose.activity.setContent {} }
         }
         waitForNewPendingMarkersToClear()
         videoStore.directory.listFiles()
@@ -95,7 +98,7 @@ class RecorderFlowTest {
         // Back from review keeps the file and takes the user to the saved-video library.
         pressBack()
         waitForText(SAVED_VIDEOS)
-        waitForText(video.name)
+        waitForContentDescription(PLAY_PREFIX + video.name)
         check(video.exists()) { "Recording disappeared when leaving review" }
 
         compose.onNodeWithContentDescription(PLAY_PREFIX + video.name).performClick()
@@ -107,7 +110,7 @@ class RecorderFlowTest {
 
         compose.onNodeWithText(DONE).performClick()
         waitForText(SAVED_VIDEOS)
-        waitForText(video.name)
+        waitForContentDescription(PLAY_PREFIX + video.name)
     }
 
     @Test
@@ -141,14 +144,15 @@ class RecorderFlowTest {
         waitForText(REVIEW_VIDEO)
         pressBack()
         waitForText(SAVED_VIDEOS)
-        waitForText(video.name)
+        waitForContentDescription(PLAY_PREFIX + video.name)
     }
 
     @Test
     fun retakeCanBeCancelledOrConfirmed() {
         val video = recordVideo()
+        waitForFileReady(video)
 
-        compose.onNodeWithText(RETAKE).performClick()
+        compose.onNodeWithText(RETAKE).assertIsEnabled().performClick()
         waitForText(DELETE_RECORDING)
         compose.onNodeWithText(CANCEL).performClick()
         waitForText(REVIEW_VIDEO)
@@ -165,15 +169,16 @@ class RecorderFlowTest {
     @Test
     fun keptVideoAppearsInLibraryAndCanBeDeleted() {
         val video = recordVideo()
+        waitForFileReady(video)
 
         compose.onNodeWithText(KEEP_VIDEO).performClick()
         waitForText(SAVED_VIDEOS)
-        waitForText(video.name)
+        waitForContentDescription(PLAY_PREFIX + video.name)
 
         compose.onNodeWithContentDescription(DELETE_PREFIX + video.name).performClick()
         waitForText(DELETE_RECORDING)
         compose.onNodeWithText(CANCEL).performClick()
-        waitForText(video.name)
+        waitForContentDescription(PLAY_PREFIX + video.name)
         check(video.exists()) { "Cancel removed the saved recording" }
 
         compose.onNodeWithContentDescription(DELETE_PREFIX + video.name).performClick()
@@ -181,7 +186,7 @@ class RecorderFlowTest {
         clickDialogButton(DELETE)
         compose.waitUntil(timeoutMillis = FILE_WAIT_TIMEOUT) { !video.exists() }
         check(!video.exists()) { "Deleting a saved video did not remove its file" }
-        compose.onNodeWithText(video.name).assertDoesNotExist()
+        compose.onNodeWithContentDescription(PLAY_PREFIX + video.name).assertDoesNotExist()
     }
 
     @Test
@@ -192,10 +197,10 @@ class RecorderFlowTest {
             video.copyTo(pending.outputFile)
             compose.onNodeWithText(KEEP_VIDEO).performClick()
             waitForText(SAVED_VIDEOS)
-            waitForText(video.name)
-            compose.onNodeWithText(pending.outputFile.name).assertDoesNotExist()
+            waitForContentDescription(PLAY_PREFIX + video.name)
+            compose.onNodeWithContentDescription(PLAY_PREFIX + pending.outputFile.name).assertDoesNotExist()
             pending.preserveForRecovery()
-            waitForText(pending.outputFile.name)
+            waitForContentDescription(PLAY_PREFIX + pending.outputFile.name)
         } finally {
             pending.discard()
             videoStore.deleteVideo(pending.outputFile)
@@ -225,6 +230,12 @@ class RecorderFlowTest {
         }
         return checkNotNull(createdVideo) { "Camera did not create a playable video file" }
             .also(::assertPlayableVideo)
+    }
+
+    private fun waitForFileReady(file: File) {
+        // Retake/deletion intentionally reject a recording while its analysis/export owns it.
+        val jobs = com.example.one_take.captions.CaptionJobs.get(targetContext)
+        compose.waitUntil(timeoutMillis = 60_000) { !jobs.busy || jobs.sourcePath != file.absolutePath }
     }
 
     private fun clickDialogButton(label: String) {
@@ -333,7 +344,7 @@ class RecorderFlowTest {
     private companion object {
         const val START_RECORDING = "Start recording"
         const val STOP_RECORDING = "Stop recording"
-        const val SAVED_VIDEOS = "Saved videos"
+        const val SAVED_VIDEOS = "Projects"
         const val RECORD_A_VIDEO = "Record a video"
         const val REVIEW_VIDEO = "Review video"
         const val KEEP_VIDEO = "Keep video"
