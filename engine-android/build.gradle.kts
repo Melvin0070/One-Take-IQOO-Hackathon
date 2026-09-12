@@ -4,9 +4,11 @@ val qairtSdk = providers.environmentVariable("QAIRT_SDK_ROOT")
 if (qairtSdk.isPresent) {
     listOf(
         "include/QNN/QnnInterface.h",
+        "include/QNN/System/QnnSystemInterface.h",
         "lib/aarch64-android/libQnnHtp.so",
         "lib/aarch64-android/libQnnHtpPrepare.so",
         "lib/aarch64-android/libQnnHtpV81Stub.so",
+        "lib/aarch64-android/libQnnSystem.so",
         "lib/hexagon-v81/unsigned/libQnnHtpV81Skel.so",
     ).forEach { relativePath ->
         require(file("${qairtSdk.get()}/$relativePath").isFile) {
@@ -19,7 +21,12 @@ val stageQairtRuntime = tasks.register<Sync>("stageQairtRuntime") {
     enabled = qairtSdk.isPresent
     into(qairtLibraries.map { it.dir("arm64-v8a") })
     from(qairtSdk.map { "$it/lib/aarch64-android" }) {
-        include("libQnnHtp.so", "libQnnHtpPrepare.so", "libQnnHtpV81Stub.so")
+        include(
+            "libQnnHtp.so",
+            "libQnnHtpPrepare.so",
+            "libQnnHtpV81Stub.so",
+            "libQnnSystem.so",
+        )
     }
     from(qairtSdk.map { "$it/lib/hexagon-v81/unsigned" }) {
         include("libQnnHtpV81Skel.so")

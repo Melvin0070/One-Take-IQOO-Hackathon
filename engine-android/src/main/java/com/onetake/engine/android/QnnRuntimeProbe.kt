@@ -11,13 +11,15 @@ object QnnRuntimeProbe {
         if (Build.VERSION.SDK_INT < 31 || Build.SOC_MODEL != "SM8850" || Build.MODEL != "I2501") {
             return QnnRuntimeStatus(QnnRuntimeState.WRONG_TARGET)
         }
-        return try {
-            System.loadLibrary("onetake_qnn_probe")
-            QnnRuntimeStatus.fromNativeCode(probeNative(
-                File(context.applicationInfo.nativeLibraryDir, "libQnnHtp.so").absolutePath
-            ))
-        } catch (_: UnsatisfiedLinkError) {
-            QnnRuntimeStatus(QnnRuntimeState.LIBRARY_UNAVAILABLE)
+        return synchronized(QnnRuntimeAccessLock) {
+            try {
+                System.loadLibrary("onetake_qnn_probe")
+                QnnRuntimeStatus.fromNativeCode(probeNative(
+                    File(context.applicationInfo.nativeLibraryDir, "libQnnHtp.so").absolutePath
+                ))
+            } catch (_: UnsatisfiedLinkError) {
+                QnnRuntimeStatus(QnnRuntimeState.LIBRARY_UNAVAILABLE)
+            }
         }
     }
 
