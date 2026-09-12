@@ -58,4 +58,13 @@
     <string name="camera_level_state_level">Level</string>
     <string name="camera_level_state_tilted">Tilted</string>
     <string name="caption_live_listening">Preparing captions while you record…</string>
+
+    <!-- Visual suggestions (issue #60 demo scope) -->
+    <string name="visual_suggestions">Visual Suggestions</string>
+    <string name="visual_suggestions_title">Visual Suggestions</string>
+    <string name="visual_suggestions_preview_unavailable">The camera preview is not ready yet.</string>
+    <string name="visual_suggestions_capture_failed">Could not capture the camera preview.</string>
+    <string name="visual_suggestions_analysis_failed">Could not analyze this frame. Please try again.</string>
+    <string name="visual_suggestions_good">Looks good</string>
+    <string name="visual_suggestions_dismiss">Dismiss</string>
 </resources>

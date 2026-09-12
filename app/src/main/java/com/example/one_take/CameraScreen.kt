@@ -232,6 +232,7 @@ internal fun CameraScreen(
             }
             Column(Modifier.align(Alignment.BottomEnd).padding(12.dp), horizontalAlignment = Alignment.End,
                 verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                VisualSuggestionsButton(previewView, recorder.faceObservation, cameraReady && (idle || recording))
                 if (zoomOpen && canZoom) ZoomPanel(recorder.zoomRatio, recorder.minZoomRatio, recorder.maxZoomRatio, recorder::setZoomRatio)
                 val zoomLabel = stringResource(R.string.camera_zoom)
                 Box(Modifier.size(48.dp, 56.dp).clip(RoundedCornerShape(12.dp)).background(Color.Black.copy(alpha = .65f))
