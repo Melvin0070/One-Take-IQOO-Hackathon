@@ -1,5 +1,18 @@
 # Current verification
 
+## Atomic commit ba90938 recheck, 2026-09-12
+
+On the user's subsequent request to test the commit, the focused check passed:
+5/5 ProjectCatalog unit tests and 4/4 ProjectsFlowTest device tests (7.026 seconds).
+The device run completed without foreground assistance on I2501 `10BFC41SMX001UZ`.
+It verifies saved edits across reopening/recreation, original-file hash preservation,
+confirmed deletion, unavailable details, and journal-derived script title/mode.
+
+Commands: `./gradlew.bat :app:testDebugUnitTest --tests com.example.one_take.ProjectCatalogTest :app:assembleDebug :app:assembleDebugAndroidTest --console=plain`,
+then `adb install -r` for both APKs and direct instrumentation with `-e class com.example.one_take.ProjectsFlowTest`.
+Build and focused tests passed; the full suite was not rerun. Logs: `app/build/projects-atomic-check.log`
+and `app/build/projects-atomic-device.log`. No implementation changes were needed.
+
 ## Projects screen #63, 2026-09-12 (Windows)
 
 Base: `9b7f909`, branch `feat/63-projects-screen`. See [scope and remaining integration](projects-screen.md).
@@ -37,7 +50,7 @@ wait for the existing post-processing ownership guard before exercising deletion
 rerun passed all four Projects cases and retake; the recording-delete case lost its Compose hierarchy when
 Vivo Remote Control became foreground. The final isolated recording-delete rerun passed in 6.242 seconds
 (`projects-delete-final.log`). This is not a claim that the broad suite passed in one unattended invocation.
-No further tests were run after the user requested implementation-only work.
+Testing paused when the user requested implementation-only work; the later authorized commit recheck is recorded above.
 
 ```powershell
 adb -s 10BFC41SMX001UZ install -r app/build/outputs/apk/debug/app-debug.apk
